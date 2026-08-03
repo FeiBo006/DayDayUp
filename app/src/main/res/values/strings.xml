@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DayDayUp</string>
+    <string name="channel_reminders">任务提醒</string>
+    <string name="channel_reminders_desc">在你设定的时间提醒你完成任务</string>
+</resources>

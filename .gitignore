@@ -1,0 +1,46 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Kotlin
+.kotlin/
+
+# Local Android SDK configuration
+local.properties
+
+# Project-local AI / indexing / analysis data
+.codegraph/
+.reasonix/
+reasonix.toml
+
+# Android build outputs and native build intermediates
+captures/
+externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.apks
+mapping/
+
+# Signing keys and sensitive configuration
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+*.pem
+*.p12
+.env
+*.env
+.env.*
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini
