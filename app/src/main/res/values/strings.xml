@@ -3,4 +3,8 @@
     <string name="app_name">DayDayUp</string>
     <string name="channel_reminders">任务提醒</string>
     <string name="channel_reminders_desc">在你设定的时间提醒你完成任务</string>
+    <string name="channel_keep_alive">后台保活</string>
+    <string name="channel_keep_alive_desc">一条常驻通知，防止系统清掉还没发出的提醒</string>
+    <string name="keep_alive_title">DayDayUp 正在守着你的提醒</string>
+    <string name="keep_alive_text">在「设置 → 提醒与后台」里可以关掉这条通知</string>
 </resources>

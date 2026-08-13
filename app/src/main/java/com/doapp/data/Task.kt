@@ -21,6 +21,12 @@ data class Task(
     val completedAt: Long? = null,
     /** Epoch millis of the reminder, or null when the task has none. */
     val reminderAt: Long? = null,
+    /**
+     * When the reminder notification actually went out. Alarms don't survive a force-stop or a
+     * powered-off phone, so a reminder can come due with nothing listening; this is what lets the
+     * app deliver that one late instead of losing it, and deliver it only once.
+     */
+    val notifiedAt: Long? = null,
     /** Epoch day (LocalDate.toEpochDay) this task is planned for, when it lives in Plan. */
     val planDay: Long? = null,
     /** Set when the task sits in the trash; null while it's active. */

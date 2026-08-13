@@ -7,18 +7,25 @@ import android.content.Intent
 import android.os.Build
 import com.doapp.MainActivity
 import com.doapp.data.Task
+import com.doapp.data.TaskStore
 
 object Reminders {
 
     // A new channel id lets existing installs recover from an old muted channel.
     const val CHANNEL_ID = "task_reminders_v2"
+
+    /** How late a missed reminder may still be worth delivering. */
+    private const val MISSED_GRACE_MILLIS = 48L * 60L * 60L * 1000L
+
     const val EXTRA_TASK_ID = "task_id"
     const val EXTRA_TITLE = "task_title"
     const val EXTRA_NOTE = "task_note"
 
     fun sync(context: Context, task: Task) {
         val at = task.reminderAt
-        if (task.done || at == null || at <= System.currentTimeMillis()) {
+        // A trashed task keeps its reminder so restoring it brings the reminder back — but it
+        // must not fire while the task sits in the bin, and syncAll() sees the whole list.
+        if (task.done || task.isTrashed || at == null || at <= System.currentTimeMillis()) {
             cancel(context, task.id)
         } else {
             schedule(context, task, at)
@@ -26,6 +33,31 @@ object Reminders {
     }
 
     fun syncAll(context: Context, tasks: List<Task>) = tasks.forEach { sync(context, it) }
+
+    /**
+     * Delivers reminders that came due while nothing was listening. An alarm is held by the
+     * system, not by us, and it is dropped when the phone is powered off or when the app is
+     * force-stopped — which on a lot of Chinese ROMs is what swiping the app away does. Without
+     * this pass those reminders are simply gone, which is the "只有挂着后台才收得到" symptom.
+     *
+     * Runs at every app start and at boot. Each reminder goes out at most once, tracked by
+     * [Task.notifiedAt].
+     */
+    fun deliverMissed(context: Context, store: TaskStore) {
+        val now = System.currentTimeMillis()
+        store.tasks.value
+            .filter { !it.done && !it.isTrashed && it.notifiedAt == null }
+            .filter { it.reminderAt != null && it.reminderAt <= now }
+            .forEach { task ->
+                // Anything older than the grace window is retired quietly. Firing a notification
+                // for something three weeks overdue is noise, not a reminder.
+                val withinGrace = now - (task.reminderAt ?: 0L) <= MISSED_GRACE_MILLIS
+                if (withinGrace) {
+                    Notifications.post(context, task.id, task.title, task.note, late = true)
+                }
+                store.markNotified(task.id, now)
+            }
+    }
 
     fun cancel(context: Context, taskId: String) {
         alarmManager(context).cancel(pendingIntent(context, taskId, null, null, mutable = false))

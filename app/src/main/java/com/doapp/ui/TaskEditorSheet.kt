@@ -1,13 +1,7 @@
 package com.doapp.ui
 
 import android.Manifest
-import android.app.AlarmManager
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -34,7 +28,9 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -69,9 +65,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.doapp.data.Bucket
 import com.doapp.data.Task
+import com.doapp.notify.BackgroundAccess
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
 import java.time.LocalDate
@@ -101,31 +97,47 @@ fun TaskEditorSheet(
     var bucket by remember { mutableStateOf(initial?.bucket ?: defaultBucket) }
 
     val initialReminder = initial?.reminderAt?.toLocalDateTime()
+    val defaultReminder = remember { defaultReminderAt() }
     var reminderOn by remember { mutableStateOf(initial?.reminderAt != null) }
     var reminderDate by remember {
-        mutableStateOf(initialReminder?.toLocalDate() ?: LocalDate.now())
+        mutableStateOf(initialReminder?.toLocalDate() ?: defaultReminder.toLocalDate())
     }
     var reminderTime by remember {
-        mutableStateOf(initialReminder?.toLocalTime() ?: defaultReminderTime())
+        mutableStateOf(initialReminder?.toLocalTime() ?: defaultReminder.toLocalTime())
     }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    // A reminder in the past is dropped by Reminders.sync, so say so rather than showing a bell
+    // on the row that will never ring.
+    val reminderAt = LocalDateTime.of(reminderDate, reminderTime)
+    val reminderIsPast = !reminderAt.isAfter(LocalDateTime.now())
 
     // The planned day only exists for Plan tasks; Today has no date picker on purpose.
     var planDay by remember {
         mutableStateOf(initial?.planDay ?: LocalDate.now().plusDays(1).toEpochDay())
     }
     var showPlanDatePicker by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
 
+    // Set when a permission request came back empty-handed. On a permanently denied permission
+    // the system shows no dialog at all, so without this the switch just snaps back with no
+    // explanation and no way forward.
+    var notificationsDenied by remember { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> reminderOn = granted }
-    val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-    val backgroundAllowed = isIgnoringBatteryOptimizations(context)
+    ) { granted ->
+        reminderOn = granted
+        notificationsDenied = !granted
+    }
+
+    // These live in system settings, and the user goes there and comes back. Re-read them on
+    // every resume or the hints stay on screen after they've been dealt with.
+    val resumes = rememberResumeCount()
+    val notificationsAllowed = remember(resumes, notificationsDenied) {
+        BackgroundAccess.notificationsAllowed(context)
+    }
+    val exactAllowed = remember(resumes) { BackgroundAccess.exactAlarmsAllowed(context) }
+    val backgroundAllowed = remember(resumes) { BackgroundAccess.batteryUnrestricted(context) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -138,6 +150,9 @@ fun TaskEditorSheet(
         Column(
             Modifier
                 .imePadding()
+                // With the keyboard up, or with all the permission hints showing, the save button
+                // would otherwise be pushed off the bottom of the sheet.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(
                     bottom = WindowInsets.navigationBars.asPaddingValues()
@@ -264,24 +279,19 @@ fun TaskEditorSheet(
                                 Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                ValueChip(formatDate(LocalDateTime.of(reminderDate, reminderTime))) {
-                                    showDatePicker = true
-                                }
-                                ValueChip(formatTime(LocalDateTime.of(reminderDate, reminderTime))) {
-                                    showTimePicker = true
-                                }
+                                ValueChip(formatDate(reminderAt)) { showDatePicker = true }
+                                ValueChip(formatTime(reminderAt)) { showTimePicker = true }
                             }
-                            if (!canScheduleExact(context)) {
-                                ExactAlarmHint(
-                                    onOpenSettings = { openExactAlarmSettings(context) },
+                            if (reminderIsPast) {
+                                PastReminderHint(
                                     modifier = Modifier.padding(
                                         start = 14.dp, end = 14.dp, bottom = 12.dp
                                     ),
                                 )
                             }
-                            if (!notificationsAllowed) {
-                                NotificationPermissionHint(
-                                    onOpenSettings = { openNotificationSettings(context) },
+                            if (!exactAllowed) {
+                                ExactAlarmHint(
+                                    onOpenSettings = { BackgroundAccess.openExactAlarmSettings(context) },
                                     modifier = Modifier.padding(
                                         start = 14.dp, end = 14.dp, bottom = 12.dp
                                     ),
@@ -289,12 +299,25 @@ fun TaskEditorSheet(
                             }
                             if (!backgroundAllowed) {
                                 BackgroundReminderHint(
-                                    onOpenSettings = { openBatteryOptimizationSettings(context) },
+                                    onOpenSettings = { BackgroundAccess.openBatterySettings(context) },
                                     modifier = Modifier.padding(
                                         start = 14.dp, end = 14.dp, bottom = 12.dp
                                     ),
                                 )
                             }
+                        }
+                    }
+
+                    // Deliberately outside the switch's AnimatedVisibility: when the permission
+                    // is denied the switch can't stay on, so a hint nested in there could never
+                    // be seen — which left the user with no way to ever enable reminders again.
+                    if (!notificationsAllowed && (reminderOn || notificationsDenied)) {
+                        Column {
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(m.hairline))
+                            NotificationPermissionHint(
+                                onOpenSettings = { BackgroundAccess.openNotificationSettings(context) },
+                                modifier = Modifier.padding(14.dp),
+                            )
                         }
                     }
                 }
@@ -311,20 +334,25 @@ fun TaskEditorSheet(
                 Spacer(Modifier.weight(1f))
                 PrimaryButton(
                     label = if (initial == null) "添加" else "保存",
-                    enabled = title.isNotBlank(),
+                    // Each tap on a new task mints a fresh UUID, so a double tap before the sheet
+                    // closes would add the same task twice.
+                    enabled = title.isNotBlank() && !saving,
                     onClick = {
-                        val at = if (reminderOn) {
-                            LocalDateTime.of(reminderDate, reminderTime).toEpochMillis()
-                        } else null
-                        val task = (initial ?: Task(title = "", createdAt = System.currentTimeMillis()))
-                            .copy(
+                        saving = true
+                        val at = if (reminderOn) reminderAt.toEpochMillis() else null
+                        val base = initial ?: Task(title = "", createdAt = System.currentTimeMillis())
+                        onSave(
+                            base.copy(
                                 title = title.trim(),
                                 note = note.trim(),
                                 bucket = bucket,
                                 reminderAt = at,
+                                // Moving the reminder makes it a new one, so let it fire again
+                                // rather than staying retired by the last delivery.
+                                notifiedAt = if (at == base.reminderAt) base.notifiedAt else null,
                                 planDay = if (bucket == Bucket.LATER) planDay else null,
                             )
-                        onSave(task)
+                        )
                     },
                 )
             }
@@ -400,57 +428,23 @@ fun TaskEditorSheet(
     }
 }
 
-/** Next round-ish hour, but never in the past — a reminder you've already missed is noise. */
-private fun defaultReminderTime(): LocalTime {
-    val next = LocalTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0)
-    return if (next < LocalTime.now()) LocalTime.of(23, 30) else next
-}
+/**
+ * Next round hour, never in the past — a reminder you've already missed is noise. This has to
+ * carry the date too: LocalTime.plusHours wraps around midnight, so at 23:45 a time-only default
+ * lands on 00:00 *today*, which is nineteen hours in the past.
+ */
+private fun defaultReminderAt(): LocalDateTime =
+    LocalDateTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0)
 
-private fun canScheduleExact(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-    val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    return manager.canScheduleExactAlarms()
-}
-
-private fun openExactAlarmSettings(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                .setData(android.net.Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
-}
-
-private fun openNotificationSettings(context: Context) {
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
-}
-
-private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
-    return runCatching {
-        context.getSystemService(PowerManager::class.java)
-            ?.isIgnoringBatteryOptimizations(context.packageName)
-            ?: true
-    }.getOrDefault(true)
-}
-
-private fun openBatteryOptimizationSettings(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(android.net.Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
+@Composable
+private fun PastReminderHint(modifier: Modifier = Modifier) {
+    val m = materials
+    Text(
+        "这个时间已经过去了，保存后不会提醒。",
+        style = MaterialTheme.typography.labelLarge,
+        color = m.destructive,
+        modifier = modifier,
+    )
 }
 
 @Composable
