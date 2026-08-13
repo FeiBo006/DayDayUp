@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below. tasks.json and the appearance prefs are worth carrying to a new device;
+  an imported wallpaper is not — it can be several MB against a 25MB backup quota, and losing it
+  costs the user one tap to pick another.
+-->
+<full-backup-content>
+    <include domain="file" path="tasks.json" />
+    <include domain="file" path="focus.json" />
+    <include domain="sharedpref" path="appearance.xml" />
+    <include domain="sharedpref" path="reminders.xml" />
+    <include domain="sharedpref" path="focus.xml" />
+    <exclude domain="file" path="." />
+</full-backup-content>

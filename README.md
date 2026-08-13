@@ -85,21 +85,43 @@ app/build/outputs/apk/debug/app-debug.apk
 .\gradlew.bat installDebug
 ```
 
-运行单元测试：
-
-```powershell
-.\gradlew.bat test
-```
+项目目前还没有单元测试，`app/src/` 下只有 `main` 源集。补测试时新建 `app/src/test/java/`，再用 `.\gradlew.bat test` 运行。
 
 ## 数据存储
 
 应用数据保存在 Android 应用私有目录中，不会写入项目目录：
 
 - 任务：`tasks.json`
-- 外观设置：`SharedPreferences`
+- 外观与提醒设置：`SharedPreferences`
 - 自定义壁纸：应用私有文件目录中的图片文件
 
-卸载应用通常会同时清除这些本地数据。当前项目没有云同步功能。
+卸载应用会同时清除这些本地数据。当前项目没有云同步功能。
+
+### 备份
+
+「设置 → 备份」可以把任务导出成一个 JSON 文件，位置由系统文件选择器决定，因此不会随应用一起被卸载。导入采用**按 id 合并**：已存在的任务保持不变，只补进缺少的，所以导入不会覆盖现有数据。
+
+## 正式签名
+
+Android 只允许用**同一个密钥签名**的安装包覆盖安装。签名对不上时只能先卸载，而卸载会带走 `tasks.json`。所以要长期更新而不丢数据，必须用固定的密钥库签 release 包。
+
+生成一次密钥库（之后务必备份好，**丢了就再也无法覆盖更新已安装的版本**）：
+
+```powershell
+keytool -genkeypair -v -keystore daydayup.jks -alias daydayup -keyalg RSA -keysize 2048 -validity 10000
+```
+
+把 `keystore.properties.example` 复制成 `keystore.properties` 并填入密码。该文件已被 `.gitignore` 排除。
+
+```powershell
+.\gradlew.bat assembleRelease
+```
+
+产物在 `app/build/outputs/apk/release/app-release.apk`。没有 `keystore.properties` 时构建不会失败，只会产出 `app-release-unsigned.apk`。
+
+每次准备安装的构建都要提高 `app/build.gradle.kts` 里的 `versionCode`，否则系统会拒绝安装。
+
+> 注意：从当前的 debug 签名切换到正式签名时，**这一次仍然需要卸载重装**。切换前先用「设置 → 备份 → 导出」保存数据。
 
 ## 目录结构
 
@@ -127,13 +149,9 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## 上传到 GitHub
 
-项目当前目录还不是 Git 仓库，可以在项目根目录执行：
+项目已经是 Git 仓库，主分支为 `main`。关联远程仓库并推送：
 
 ```powershell
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
 git remote add origin https://github.com/<你的用户名>/<你的仓库名>.git
 git push -u origin main
 ```
