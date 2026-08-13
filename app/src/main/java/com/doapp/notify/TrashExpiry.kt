@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.doapp.data.Task
+import com.doapp.data.TaskStore
 
 object TrashExpiry {
 
@@ -18,7 +19,7 @@ object TrashExpiry {
 
         val next = tasks.asSequence()
             .mapNotNull { it.deletedAt }
-            .map { it + 7L * 24L * 60L * 60L * 1000L }
+            .map { it + TaskStore.TRASH_RETENTION_MILLIS }
             .filter { it > System.currentTimeMillis() }
             .minOrNull()
             ?: return

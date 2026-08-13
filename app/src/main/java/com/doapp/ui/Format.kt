@@ -1,5 +1,6 @@
 package com.doapp.ui
 
+import com.doapp.data.TaskStore
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -59,6 +60,6 @@ fun formatTime(dateTime: LocalDateTime): String =
     dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
 
 fun trashDaysRemaining(deletedAt: Long, now: Long = System.currentTimeMillis()): Int {
-    val remaining = deletedAt + 7L * 24L * 60L * 60L * 1000L - now
+    val remaining = deletedAt + TaskStore.TRASH_RETENTION_MILLIS - now
     return max(0, ceil(remaining / (24L * 60L * 60L * 1000.0)).toInt())
 }

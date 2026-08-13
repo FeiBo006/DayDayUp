@@ -2,7 +2,6 @@ package com.doapp.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,8 +15,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -165,24 +162,4 @@ fun CompletionCircle(
                 },
         )
     }
-}
-
-/**
- * A translucent surface. Bigger surfaces read as thicker material: more blur, more opacity.
- * Never stack one of these directly on another — legibility collapses.
- */
-@Composable
-fun GlassSurface(
-    shape: Shape,
-    modifier: Modifier = Modifier,
-    blurRadius: Dp = 0.dp,
-    tint: Color = materials.chrome,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier
-            .clip(shape)
-            .then(if (blurRadius > 0.dp) Modifier.blur(blurRadius) else Modifier)
-            .background(tint)
-    ) { content() }
 }

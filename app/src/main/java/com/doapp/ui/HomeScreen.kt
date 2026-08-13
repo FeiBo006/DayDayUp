@@ -35,8 +35,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,7 +55,10 @@ import com.doapp.data.Bucket
 import com.doapp.data.Task
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
+import kotlinx.coroutines.delay
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /** How much room the bottom dock needs, so content and the add button clear it. */
 private val DockClearance = 88.dp
@@ -69,7 +75,16 @@ fun HomeScreen(
     val m = materials
     val listState = rememberLazyListState()
 
-    val todayEpochDay = LocalDate.now().toEpochDay()
+    // Left to plain LocalDate.now() this only refreshes when something else recomposes, so an app
+    // left open overnight would still be showing yesterday and holding back today's Plan tasks.
+    var todayEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay()) }
+    LaunchedEffect(todayEpochDay) {
+        val now = LocalDateTime.now()
+        val midnight = now.toLocalDate().plusDays(1).atStartOfDay()
+        delay(Duration.between(now, midnight).toMillis().coerceAtLeast(1_000L))
+        todayEpochDay = LocalDate.now().toEpochDay()
+    }
+    val today = LocalDate.ofEpochDay(todayEpochDay)
 
     // A Plan task whose planned day has arrived belongs to Today — the auto-promote.
     fun effectiveBucket(task: Task): Bucket =
@@ -106,6 +121,7 @@ fun HomeScreen(
                 Header(
                     remaining = todayOpen.size,
                     selfReminder = appearance.selfReminder,
+                    today = today,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }
@@ -126,7 +142,7 @@ fun HomeScreen(
                 TaskRow(
                     task = task,
                     onToggle = { onToggle(task) },
-                    onOpen = { onOpenTask(promoted(task)) },
+                    onOpen = { onOpenTask(promoted(task, todayEpochDay)) },
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -138,7 +154,7 @@ fun HomeScreen(
                     TaskRow(
                         task = task,
                         onToggle = { onToggle(task) },
-                        onOpen = { onOpenTask(promoted(task)) },
+                        onOpen = { onOpenTask(promoted(task, todayEpochDay)) },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -217,15 +233,18 @@ fun HomeScreen(
 }
 
 /** When a promoted Plan task is opened from the Today list, commit it as a Today task. */
-private fun promoted(task: Task): Task {
-    val today = LocalDate.now().toEpochDay()
-    return if (task.bucket == Bucket.LATER && task.planDay != null && task.planDay <= today) {
+private fun promoted(task: Task, todayEpochDay: Long): Task =
+    if (task.bucket == Bucket.LATER && task.planDay != null && task.planDay <= todayEpochDay) {
         task.copy(bucket = Bucket.TODAY, planDay = null)
     } else task
-}
 
 @Composable
-private fun Header(remaining: Int, selfReminder: String, modifier: Modifier = Modifier) {
+private fun Header(
+    remaining: Int,
+    selfReminder: String,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
     val m = materials
     Column(modifier.fillMaxWidth()) {
         Text(
@@ -234,8 +253,8 @@ private fun Header(remaining: Int, selfReminder: String, modifier: Modifier = Mo
             color = m.label,
         )
         Text(
-            text = if (remaining == 0) "${formatToday()} · 今天清空了"
-            else "${formatToday()} · 还有 $remaining 件",
+            text = if (remaining == 0) "${formatToday(today)} · 今天清空了"
+            else "${formatToday(today)} · 还有 $remaining 件",
             style = MaterialTheme.typography.bodyMedium,
             color = m.secondaryLabel,
             modifier = Modifier.padding(top = 2.dp),

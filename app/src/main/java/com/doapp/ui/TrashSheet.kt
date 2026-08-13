@@ -3,6 +3,8 @@ package com.doapp.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +80,9 @@ fun TrashSheet(
     ) {
         Column(
             Modifier
+                // Nothing bounds how many tasks land in here, and a plain Column would just clip
+                // the ones past the bottom edge with no way to reach them.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(
                     bottom = WindowInsets.navigationBars.asPaddingValues()

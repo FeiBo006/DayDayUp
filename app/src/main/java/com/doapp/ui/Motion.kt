@@ -12,7 +12,7 @@ import kotlin.math.sign
 /**
  * Apple describes springs with damping ratio + response (seconds), not mass/stiffness.
  * Compose wants stiffness, and with mass = 1 the two relate as stiffness = (2π / response)².
- * These four specs cover everything in the app.
+ * These three specs cover everything in the app.
  */
 object Motion {
     /** Reposition, settle-back, list movement. Critically damped: no overshoot. */
@@ -23,9 +23,6 @@ object Motion {
 
     /** Only after a gesture carried momentum — a flick deserves the overshoot, a fade does not. */
     val Momentum: AnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 247f)
-
-    /** Sheets and drawers. */
-    val Sheet: AnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 439f)
 }
 
 /**

@@ -50,7 +50,15 @@ class AppearanceStore(private val context: Context) {
     )
     val appearance: StateFlow<Appearance> = _appearance.asStateFlow()
 
-    fun selectPreset(id: String) = write(_appearance.value.copy(presetId = id, usePhoto = false))
+    /**
+     * Switching to a built-in wallpaper drops the imported photo for good — there is no way back
+     * to it in the UI (the photo tile always opens the picker), so keeping the file is dead weight.
+     */
+    fun selectPreset(id: String) {
+        val previous = _appearance.value.photoFile
+        write(_appearance.value.copy(presetId = id, usePhoto = false, photoPath = null))
+        previous?.delete()
+    }
 
     fun setBlur(value: Float) = write(_appearance.value.copy(blur = value))
 

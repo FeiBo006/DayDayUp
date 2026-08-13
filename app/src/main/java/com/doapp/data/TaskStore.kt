@@ -1,13 +1,9 @@
 package com.doapp.data
 
 import android.content.Context
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -15,11 +11,14 @@ import java.io.File
 /**
  * The whole persistence layer: one JSON file, held in memory, rewritten on every mutation.
  * A todo list is a few hundred rows at most — a database would be ceremony without payoff.
+ *
+ * There is exactly one instance, owned by [com.doapp.DoApplication]. Receivers must reach for
+ * that one rather than constructing their own: two instances would each hold a private copy of
+ * the list and take turns overwriting the other's work.
  */
 class TaskStore(context: Context) {
 
-    private val file = File(context.filesDir, "tasks.json")
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val file = AtomicJsonFile(File(context.filesDir, "tasks.json"))
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
     private val _tasks = MutableStateFlow(readFromDisk(file, json))
@@ -62,6 +61,25 @@ class TaskStore(context: Context) {
         if (next != _tasks.value) persist(next)
     }
 
+    /**
+     * Folds a backup into the current list, keeping the local copy whenever an id appears in
+     * both. Merging rather than replacing means importing into an app that already has tasks
+     * can't wipe them — and after a reinstall the list is empty, so the two amount to the same.
+     *
+     * @return how many tasks the import actually added.
+     */
+    fun merge(incoming: List<Task>): Int {
+        val known = _tasks.value.mapTo(mutableSetOf()) { it.id }
+        val added = incoming.filterNot { it.id in known }
+        if (added.isNotEmpty()) persist(_tasks.value + added)
+        return added.size
+    }
+
+    /** Records that a reminder went out, so it is never delivered a second time. */
+    fun markNotified(id: String, at: Long = System.currentTimeMillis()) = mutate { list ->
+        list.map { if (it.id == id) it.copy(notifiedAt = at) else it }
+    }
+
     /** Returns the task as it looks after the toggle, so callers can (re)schedule reminders. */
     fun setDone(id: String, done: Boolean): Task? {
         val updated = _tasks.value.firstOrNull { it.id == id }?.copy(
@@ -72,30 +90,26 @@ class TaskStore(context: Context) {
         return updated
     }
 
-    fun clearCompleted(bucket: Bucket) = mutate { list ->
-        list.filterNot { it.done && it.bucket == bucket }
-    }
-
     private fun mutate(block: (List<Task>) -> List<Task>) {
         persist(block(_tasks.value))
     }
 
     private fun persist(next: List<Task>) {
         _tasks.value = next
-        io.launch { runCatching { file.writeText(json.encodeToString(next)) } }
+        file.write(json.encodeToString(next))
     }
 
     companion object {
         const val TRASH_RETENTION_MILLIS = 7L * 24L * 60L * 60L * 1000L
 
-        /** Blocking read — used by the store itself and by the boot receiver. */
-        fun readFromDisk(file: File, json: Json = Json { ignoreUnknownKeys = true }): List<Task> =
-            runCatching {
-                if (!file.exists()) emptyList()
-                else json.decodeFromString<List<Task>>(file.readText())
-            }.getOrDefault(emptyList())
-
-        fun readFromDisk(context: Context): List<Task> =
-            readFromDisk(File(context.filesDir, "tasks.json"))
+        private fun readFromDisk(file: AtomicJsonFile, json: Json): List<Task> {
+            val text = file.read() ?: return emptyList()
+            return runCatching { json.decodeFromString<List<Task>>(text) }
+                .getOrElse {
+                    // Never let a damaged file quietly become "you have no tasks".
+                    file.quarantine()
+                    emptyList()
+                }
+        }
     }
 }

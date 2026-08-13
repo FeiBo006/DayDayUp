@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -78,6 +80,9 @@ fun WallpaperSheet(
     ) {
         Column(
             Modifier
+                // Three rows of tiles plus the sliders overflow a short screen, and in landscape
+                // they overflow every screen.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(
                     bottom = WindowInsets.navigationBars.asPaddingValues()
