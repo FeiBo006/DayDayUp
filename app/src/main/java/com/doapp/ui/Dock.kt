@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,11 +38,12 @@ import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
 
 /** Which top-level page the dock is showing. */
-enum class AppPage { DO, SETTINGS }
+enum class AppPage { DO, FOCUS, SETTINGS }
 
 /**
- * The bottom dock — one frosted bar for the whole app. DO is the list, SETTINGS is everything
- * else. It floats above the wallpaper like the rest of the chrome.
+ * The bottom dock — one frosted bar for the whole app. It floats above the wallpaper like the
+ * rest of the chrome. Each item is named for what it contains rather than a vague umbrella, so
+ * where you land is predictable before you tap.
  */
 @Composable
 fun DockBar(
@@ -74,6 +76,12 @@ fun DockBar(
             icon = Icons.Rounded.CheckCircle,
             selected = current == AppPage.DO,
             onClick = { onSelect(AppPage.DO) },
+        )
+        DockItem(
+            label = "专注",
+            icon = Icons.Rounded.Timer,
+            selected = current == AppPage.FOCUS,
+            onClick = { onSelect(AppPage.FOCUS) },
         )
         DockItem(
             label = "设置",
@@ -116,7 +124,7 @@ private fun DockItem(
             .clip(appShape(16.dp))
             .background(background)
             .pressableNoRipple(interactionSource, onClick)
-            .padding(horizontal = 26.dp, vertical = 4.dp),
+            .padding(horizontal = 18.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
