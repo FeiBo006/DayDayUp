@@ -8,6 +8,8 @@ import android.os.Build
 import com.doapp.MainActivity
 import com.doapp.data.Task
 import com.doapp.data.TaskStore
+import com.doapp.data.isReminderDue
+import kotlinx.coroutines.Deferred
 
 object Reminders {
 
@@ -25,14 +27,20 @@ object Reminders {
         val at = task.reminderAt
         // A trashed task keeps its reminder so restoring it brings the reminder back — but it
         // must not fire while the task sits in the bin, and syncAll() sees the whole list.
-        if (task.done || task.isTrashed || at == null || at <= System.currentTimeMillis()) {
+        if (task.done || task.isTrashed || task.notifiedAt != null ||
+            at == null || at <= System.currentTimeMillis()
+        ) {
             cancel(context, task.id)
         } else {
             schedule(context, task, at)
         }
     }
 
-    fun syncAll(context: Context, tasks: List<Task>) = tasks.forEach { sync(context, it) }
+    fun syncAll(context: Context, tasks: List<Task>) = tasks.asSequence()
+        // A task that has never had a reminder cannot own a stale PendingIntent. Skipping it is
+        // important after a large import and keeps boot recovery comfortably within its deadline.
+        .filter { it.reminderAt != null }
+        .forEach { sync(context, it) }
 
     /**
      * Delivers reminders that came due while nothing was listening. An alarm is held by the
@@ -43,20 +51,29 @@ object Reminders {
      * Runs at every app start and at boot. Each reminder goes out at most once, tracked by
      * [Task.notifiedAt].
      */
-    fun deliverMissed(context: Context, store: TaskStore) {
+    fun deliverMissed(context: Context, store: TaskStore): Deferred<Unit>? {
         val now = System.currentTimeMillis()
+        val deliveredOrRetired = mutableSetOf<String>()
         store.tasks.value
-            .filter { !it.done && !it.isTrashed && it.notifiedAt == null }
-            .filter { it.reminderAt != null && it.reminderAt <= now }
+            .filter { it.isReminderDue(now) }
             .forEach { task ->
                 // Anything older than the grace window is retired quietly. Firing a notification
                 // for something three weeks overdue is noise, not a reminder.
                 val withinGrace = now - (task.reminderAt ?: 0L) <= MISSED_GRACE_MILLIS
-                if (withinGrace) {
+                // A denied notification permission is not a delivery. Keep the reminder pending
+                // so the next app start can retry after the user enables notifications. Very old
+                // reminders are intentionally retired, otherwise they would be reconsidered on
+                // every launch forever.
+                val handled = !withinGrace ||
                     Notifications.post(context, task.id, task.title, task.note, late = true)
-                }
-                store.markNotified(task.id, now)
+                if (handled) deliveredOrRetired += task.id
             }
+        return store.markNotified(deliveredOrRetired, now)
+    }
+
+    /** Delivers the catch-up batch and returns only after its de-duplication state is durable. */
+    suspend fun deliverMissedAndAwait(context: Context, store: TaskStore) {
+        deliverMissed(context, store)?.await()
     }
 
     fun cancel(context: Context, taskId: String) {

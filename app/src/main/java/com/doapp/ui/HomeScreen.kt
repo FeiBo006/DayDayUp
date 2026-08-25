@@ -37,20 +37,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.doapp.data.Appearance
 import com.doapp.data.Bucket
 import com.doapp.data.Task
 import com.doapp.ui.theme.appShape
@@ -63,10 +62,47 @@ import java.time.LocalDateTime
 /** How much room the bottom dock needs, so content and the add button clear it. */
 private val DockClearance = 88.dp
 
+internal data class HomeTaskGroups(
+    val todayOpen: List<Task>,
+    val todayDone: List<Task>,
+    val planOpen: List<Task>,
+    val planDone: List<Task>,
+)
+
+/**
+ * Classifies the task list once per data/day change. Keeping this outside composition also makes
+ * the auto-promotion and ordering rules directly testable.
+ */
+internal fun groupHomeTasks(tasks: List<Task>, todayEpochDay: Long): HomeTaskGroups {
+    val todayOpen = mutableListOf<Task>()
+    val todayDone = mutableListOf<Task>()
+    val planOpen = mutableListOf<Task>()
+    val planDone = mutableListOf<Task>()
+
+    tasks.forEach { task ->
+        if (task.isTrashed) return@forEach
+        val belongsToToday = task.bucket == Bucket.TODAY ||
+            (task.planDay != null && task.planDay <= todayEpochDay)
+        when {
+            belongsToToday && task.done -> todayDone += task
+            belongsToToday -> todayOpen += task
+            task.done -> planDone += task
+            else -> planOpen += task
+        }
+    }
+
+    return HomeTaskGroups(
+        todayOpen = todayOpen,
+        todayDone = todayDone.sortedByDescending { it.completedAt ?: 0L },
+        planOpen = planOpen.sortedBy { it.planDay ?: Long.MAX_VALUE },
+        planDone = planDone.sortedByDescending { it.completedAt ?: 0L },
+    )
+}
+
 @Composable
 fun HomeScreen(
     tasks: List<Task>,
-    appearance: Appearance,
+    selfReminder: String,
     onToggle: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
     onCompose: (Bucket) -> Unit,
@@ -74,10 +110,11 @@ fun HomeScreen(
 ) {
     val m = materials
     val listState = rememberLazyListState()
+    val reduceMotion = rememberReduceMotion()
 
     // Left to plain LocalDate.now() this only refreshes when something else recomposes, so an app
     // left open overnight would still be showing yesterday and holding back today's Plan tasks.
-    var todayEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay()) }
+    var todayEpochDay by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     LaunchedEffect(todayEpochDay) {
         val now = LocalDateTime.now()
         val midnight = now.toLocalDate().plusDays(1).atStartOfDay()
@@ -86,26 +123,16 @@ fun HomeScreen(
     }
     val today = LocalDate.ofEpochDay(todayEpochDay)
 
-    // A Plan task whose planned day has arrived belongs to Today — the auto-promote.
-    fun effectiveBucket(task: Task): Bucket =
-        if (task.bucket == Bucket.LATER && task.planDay != null && task.planDay <= todayEpochDay) Bucket.TODAY
-        else task.bucket
-
-    val active = tasks.filterNot { it.isTrashed }
-    val todayOpen = active.filter { !it.done && effectiveBucket(it) == Bucket.TODAY }
-    val todayDone = active.filter { it.done && effectiveBucket(it) == Bucket.TODAY }
-        .sortedByDescending { it.completedAt ?: 0L }
-    val planOpen = active.filter { !it.done && effectiveBucket(it) == Bucket.LATER }
-        .sortedBy { it.planDay ?: Long.MAX_VALUE }
-    val planDone = active.filter { it.done && effectiveBucket(it) == Bucket.LATER }
-        .sortedByDescending { it.completedAt ?: 0L }
+    val grouped = remember(tasks, todayEpochDay) { groupHomeTasks(tasks, todayEpochDay) }
+    val todayOpen = grouped.todayOpen
+    val todayDone = grouped.todayDone
+    val planOpen = grouped.planOpen
+    val planDone = grouped.planDone
 
     // Group open Plan tasks by their planned day, so each day reads as its own section.
-    val planGroups = planOpen.groupBy { it.planDay }
+    val planGroups = remember(planOpen) { planOpen.groupBy { it.planDay } }
 
     Box(modifier.fillMaxSize()) {
-        WallpaperBackground(appearance)
-
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -120,7 +147,8 @@ fun HomeScreen(
             item(key = "header") {
                 Header(
                     remaining = todayOpen.size,
-                    selfReminder = appearance.selfReminder,
+                    completed = todayDone.size,
+                    selfReminder = selfReminder,
                     today = today,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
@@ -138,24 +166,32 @@ fun HomeScreen(
                 item(key = "today-empty") { EmptyHint("今天还没有安排。点下面的新任务写一条。") }
             }
 
-            items(todayOpen, key = { it.id }) { task ->
+            items(todayOpen, key = { it.id }, contentType = { "task" }) { task ->
                 TaskRow(
                     task = task,
                     onToggle = { onToggle(task) },
                     onOpen = { onOpenTask(promoted(task, todayEpochDay)) },
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = tween(if (reduceMotion) 80 else 140, easing = Motion.EaseOut),
+                        placementSpec = tween(if (reduceMotion) 1 else 220, easing = Motion.EaseInOut),
+                        fadeOutSpec = tween(if (reduceMotion) 60 else 90, easing = Motion.EaseOut),
+                    ),
                 )
             }
 
             // Completed work sits directly beneath today's list, dimmed — done, not gone.
             if (todayDone.isNotEmpty()) {
                 item(key = "today-done-header") { CompletedDivider(todayDone.size) }
-                items(todayDone, key = { it.id }) { task ->
+                items(todayDone, key = { it.id }, contentType = { "task" }) { task ->
                     TaskRow(
                         task = task,
                         onToggle = { onToggle(task) },
                         onOpen = { onOpenTask(promoted(task, todayEpochDay)) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(if (reduceMotion) 80 else 140, easing = Motion.EaseOut),
+                            placementSpec = tween(if (reduceMotion) 1 else 220, easing = Motion.EaseInOut),
+                            fadeOutSpec = tween(if (reduceMotion) 60 else 90, easing = Motion.EaseOut),
+                        ),
                     )
                 }
             }
@@ -177,48 +213,36 @@ fun HomeScreen(
                 item(key = "plan-day-${day ?: "none"}") {
                     PlanDayHeader(day?.let(::formatPlanDay) ?: "待定")
                 }
-                items(dayTasks, key = { it.id }) { task ->
+                items(dayTasks, key = { it.id }, contentType = { "task" }) { task ->
                     TaskRow(
                         task = task,
                         onToggle = { onToggle(task) },
                         onOpen = { onOpenTask(task) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(if (reduceMotion) 80 else 140, easing = Motion.EaseOut),
+                            placementSpec = tween(if (reduceMotion) 1 else 220, easing = Motion.EaseInOut),
+                            fadeOutSpec = tween(if (reduceMotion) 60 else 90, easing = Motion.EaseOut),
+                        ),
                     )
                 }
             }
 
             if (planDone.isNotEmpty()) {
                 item(key = "plan-done-header") { CompletedDivider(planDone.size) }
-                items(planDone, key = { it.id }) { task ->
+                items(planDone, key = { it.id }, contentType = { "task" }) { task ->
                     TaskRow(
                         task = task,
                         onToggle = { onToggle(task) },
                         onOpen = { onOpenTask(task) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(if (reduceMotion) 80 else 140, easing = Motion.EaseOut),
+                            placementSpec = tween(if (reduceMotion) 1 else 220, easing = Motion.EaseInOut),
+                            fadeOutSpec = tween(if (reduceMotion) 60 else 90, easing = Motion.EaseOut),
+                        ),
                     )
                 }
             }
         }
-
-        // Floating chrome. Content scrolls underneath it rather than being cut off by a bar.
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(150.dp)
-                .then(
-                    if (m.isNeoBrutalist) Modifier.background(m.chrome)
-                    else Modifier.background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Transparent,
-                                if (m.isDark) Color.Black.copy(alpha = 0.45f)
-                                else Color.White.copy(alpha = 0.55f),
-                            )
-                        )
-                    )
-                )
-        )
 
         AddButton(
             onClick = { onCompose(Bucket.TODAY) },
@@ -241,33 +265,118 @@ private fun promoted(task: Task, todayEpochDay: Long): Task =
 @Composable
 private fun Header(
     remaining: Int,
+    completed: Int,
     selfReminder: String,
     today: LocalDate,
     modifier: Modifier = Modifier,
 ) {
     val m = materials
-    Column(modifier.fillMaxWidth()) {
+    val shape = appShape(26.dp)
+    val total = remaining + completed
+    val progress = if (total == 0) 0f else completed.toFloat() / total
+    val reduceMotion = rememberReduceMotion()
+    val animatedProgress = animateFloatAsState(
+        targetValue = progress,
+        animationSpec = if (reduceMotion) Motion.Instant else Motion.Select,
+        label = "todayProgress",
+    )
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .premiumSurface(shape = shape, elevation = 12.dp)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "DAYDAYUP",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = m.accent,
+                )
+                Text(
+                    text = formatToday(today),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = m.label,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(appShape(18.dp))
+                    .background(m.accent.copy(alpha = 0.12f))
+                    .border(1.dp, m.accent.copy(alpha = 0.18f), appShape(18.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (remaining == 0 && total > 0) "✓" else remaining.toString(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = m.accent,
+                )
+            }
+        }
+
         Text(
-            text = "DayDayUp",
-            style = MaterialTheme.typography.displaySmall,
+            text = when {
+                total == 0 -> "今天想完成什么？"
+                remaining == 0 -> "今日任务全部完成"
+                else -> "还有 $remaining 件，稳稳推进"
+            },
+            style = MaterialTheme.typography.titleMedium,
             color = m.label,
         )
-        Text(
-            text = if (remaining == 0) "${formatToday(today)} · 今天清空了"
-            else "${formatToday(today)} · 还有 $remaining 件",
-            style = MaterialTheme.typography.bodyMedium,
-            color = m.secondaryLabel,
-            modifier = Modifier.padding(top = 2.dp),
-        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("今日进度", style = MaterialTheme.typography.labelLarge, color = m.secondaryLabel)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    if (total == 0) "0 / 0" else "$completed / $total",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = m.label,
+                )
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(appShape(4.dp))
+                    .background(m.hairline)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .graphicsLayer {
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                            scaleX = animatedProgress.value
+                            alpha = if (animatedProgress.value == 0f) 0f else 1f
+                        }
+                        .background(m.accent)
+                )
+            }
+        }
+
         if (selfReminder.isNotBlank()) {
-            Text(
-                text = selfReminder,
-                style = MaterialTheme.typography.bodyMedium,
-                color = m.label,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 12.dp, end = 18.dp),
-            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(appShape(14.dp))
+                    .background(m.accent.copy(alpha = 0.08f))
+                    .padding(horizontal = 14.dp, vertical = 11.dp)
+            ) {
+                Text(
+                    text = selfReminder,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = m.label,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -289,43 +398,53 @@ private fun SectionHeader(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = Motion.Snappy,
+        animationSpec = Motion.Press,
         label = "sectionPress",
     )
 
     Row(
-        modifier.fillMaxWidth().padding(bottom = 2.dp),
+        modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier
-                .graphicsLayer { scaleX = scale; scaleY = scale }
-                .styleShadow(
-                    shape = shape,
-                    elevation = if (m.isNeoBrutalist) 8.dp else 14.dp,
-                    spotColor = if (m.isNeoBrutalist) Color.Black else Color.Black.copy(alpha = 0.4f),
-                )
-                .clip(shape)
-                .background(m.chrome)
-                .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
-                .pressableNoRipple(interactionSource, onClick)
-                .padding(horizontal = 22.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.headlineSmall, color = m.label)
-            AnimatedVisibility(
-                visible = count > 0,
-                enter = fadeIn(tween(180)),
-                exit = fadeOut(tween(180)),
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = m.label)
+        if (count > 0) {
+            Box(
+                Modifier
+                    .padding(start = 9.dp)
+                    .clip(appShape(9.dp))
+                    .background(m.accent.copy(alpha = 0.12f))
+                    .padding(horizontal = 9.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = m.tertiaryLabel,
+                    color = m.accent,
                 )
             }
+        }
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .size(42.dp)
+                .clip(appShape(14.dp))
+                .background(m.accent)
+                .styleBorder(
+                    appShape(14.dp),
+                    m.accent,
+                    width = 1.dp,
+                )
+                .pressableNoRipple(interactionSource, onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = "添加到 $title",
+                tint = onColor(m.accent),
+                modifier = Modifier.size(21.dp),
+            )
         }
     }
 }
@@ -378,43 +497,10 @@ private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val m = materials
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    // Feedback lands on press, not on release — waiting for the lift reads as lag.
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = Motion.Snappy,
-        label = "addPress",
+    AppPrimaryButton(
+        label = "新任务",
+        icon = Icons.Rounded.Add,
+        onClick = onClick,
+        modifier = modifier.padding(horizontal = 28.dp),
     )
-
-    Row(
-        modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .styleShadow(
-                shape = appShape(26.dp),
-                elevation = if (m.isNeoBrutalist) 8.dp else 14.dp,
-                spotColor = if (m.isNeoBrutalist) Color.Black else Color.Black.copy(alpha = 0.4f),
-            )
-            .clip(appShape(26.dp))
-            .background(m.accent)
-            .then(
-                when {
-                    m.isDoodle -> Modifier.doodleBorder()
-                    m.isNeoBrutalist -> Modifier.border(3.dp, Color.Black, appShape(26.dp))
-                    else -> Modifier
-                }
-            )
-            .pressableNoRipple(interactionSource, onClick)
-            .padding(horizontal = 22.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(7.dp))
-        Text(
-            "新任务",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
-        )
-    }
 }

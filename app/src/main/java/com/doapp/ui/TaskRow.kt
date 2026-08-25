@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,13 +32,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -49,15 +46,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.doapp.data.Task
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * One task. Swipe it left past the threshold to complete it — the row tracks the finger 1:1,
@@ -72,12 +66,12 @@ fun TaskRow(
 ) {
     val m = materials
     val cardShape = appShape(18.dp)
-    val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val reduceMotion = rememberReduceMotion()
     val density = LocalDensity.current
 
-    val offsetX = remember { Animatable(0f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    val settleAnimation = remember { Animatable(0f) }
     var rowWidth by remember { mutableFloatStateOf(1f) }
     var armed by remember { mutableStateOf(false) }
 
@@ -88,7 +82,7 @@ fun TaskRow(
     val pressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (pressed && !reduceMotion) 0.985f else 1f,
-        animationSpec = Motion.Snappy,
+        animationSpec = Motion.Press,
         label = "pressScale",
     )
     // Completed work stays visible but recedes — present, no longer asking for attention.
@@ -99,12 +93,12 @@ fun TaskRow(
     )
 
     val dragState = rememberDraggableState { delta ->
-        val raw = offsetX.value + delta
+        val raw = offsetX + delta
         // Left is the direction with an action behind it; the other way is a soft wall.
         val next =
             if (raw > 0f) rubberBand(raw, 0f, rowWidth)
             else rubberBand(raw, revealPx, rowWidth)
-        scope.launch { offsetX.snapTo(next) }
+        offsetX = next
 
         val nowArmed = -next >= commitPx
         if (nowArmed != armed) {
@@ -113,74 +107,61 @@ fun TaskRow(
         }
     }
 
-    val progress = min(1f, abs(min(offsetX.value, 0f)) / commitPx)
     val actionColor = if (task.done) m.tertiaryLabel else m.success
 
     Box(modifier.fillMaxWidth()) {
-        // The action revealed under the row. It only exists while the row is moved aside.
-        if (progress > 0f) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(cardShape)
-                    .background(actionColor.copy(alpha = 0.18f + 0.82f * progress)),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Icon(
-                    imageVector = if (task.done) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier
-                        .padding(end = 28.dp)
-                        .size(26.dp)
-                        .graphicsLayer {
-                            // Hint toward the outcome: the mark grows as the gesture commits.
-                            val s = 0.55f + 0.45f * progress + if (armed) 0.12f else 0f
-                            scaleX = s
-                            scaleY = s
-                            alpha = progress
-                        },
-                )
-            }
-        }
+        // Gesture state is read in layer blocks, so every pointer delta redraws two tiny layers
+        // without recomposing the task text, shadows and card surface.
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(cardShape)
+                .background(actionColor)
+                .graphicsLayer {
+                    val progress = min(1f, abs(min(offsetX, 0f)) / commitPx)
+                    alpha = if (progress == 0f) 0f else 0.18f + 0.82f * progress
+                },
+        )
+        Icon(
+            imageVector = if (task.done) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.Check,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 28.dp)
+                .size(26.dp)
+                .graphicsLayer {
+                    val progress = min(1f, abs(min(offsetX, 0f)) / commitPx)
+                    val s = 0.86f + 0.14f * progress + if (armed) 0.08f else 0f
+                    scaleX = s
+                    scaleY = s
+                    alpha = progress
+                },
+        )
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .onSizeChanged { rowWidth = it.width.toFloat().coerceAtLeast(1f) }
                 .graphicsLayer {
+                    translationX = offsetX
                     scaleX = pressScale
                     scaleY = pressScale
                     alpha = dim
                 }
-                .styleShadow(
+                .premiumSurface(
                     shape = cardShape,
-                    elevation = if (m.isNeoBrutalist) 8.dp else if (task.done) 2.dp else 7.dp,
-                    ambientColor = if (m.isNeoBrutalist) Color.Black else Color.Black.copy(alpha = 0.35f),
-                    spotColor = if (m.isNeoBrutalist) Color.Black else Color.Black.copy(alpha = 0.35f),
-                )
-                .clip(cardShape)
-                .background(if (pressed) m.cardPressed else m.card)
-                .then(
-                    when {
-                        m.isDoodle -> Modifier.doodleBorder()
-                        m.isNeoBrutalist -> Modifier.border(3.dp, Color.Black, cardShape)
-                        else -> Modifier.border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(listOf(m.topEdge, Color.Transparent)),
-                            shape = cardShape,
-                        )
-                    }
+                    elevation = if (task.done) 1.dp else 2.dp,
+                    pressed = pressed,
                 )
                 .draggable(
                     state = dragState,
                     orientation = Orientation.Horizontal,
                     // A row still settling can be grabbed again — never wait for an animation.
-                    startDragImmediately = offsetX.isRunning,
-                    onDragStarted = { offsetX.stop() },
+                    startDragImmediately = settleAnimation.isRunning,
+                    onDragStarted = { settleAnimation.stop() },
                     onDragStopped = { velocity ->
-                        val projected = offsetX.value + projectMomentum(velocity)
+                        val projected = offsetX + projectMomentum(velocity)
                         val commit = projected <= -commitPx
                         armed = false
                         if (commit) {
@@ -189,11 +170,12 @@ fun TaskRow(
                         }
                         // No seam between drag and animation: the spring starts at the
                         // finger's exact velocity.
-                        offsetX.animateTo(
+                        settleAnimation.snapTo(offsetX)
+                        settleAnimation.animateTo(
                             targetValue = 0f,
-                            animationSpec = if (reduceMotion) Motion.Snappy else Motion.Momentum,
+                            animationSpec = if (reduceMotion) Motion.Instant else Motion.Momentum,
                             initialVelocity = velocity,
-                        )
+                        ) { offsetX = value }
                     },
                 )
                 .pressableNoRipple(interactionSource, onOpen)

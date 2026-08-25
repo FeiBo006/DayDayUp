@@ -10,5 +10,4 @@
     <include domain="sharedpref" path="appearance.xml" />
     <include domain="sharedpref" path="reminders.xml" />
     <include domain="sharedpref" path="focus.xml" />
-    <exclude domain="file" path="." />
 </full-backup-content>

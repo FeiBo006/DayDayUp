@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Do" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/launch_background</item>
+        <!-- The Compose wordmark is the actual entrance. Keep Android 12's mandatory splash
+             neutral so the launcher icon does not compete with DayDayUp a moment later. -->
+        <item name="android:windowSplashScreenBackground">@color/launch_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+</resources>

@@ -2,7 +2,10 @@ package com.doapp.ui
 
 import android.provider.Settings
 import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -15,6 +18,19 @@ import kotlin.math.sign
  * These three specs cover everything in the app.
  */
 object Motion {
+    /** Strong curves make short interactions feel immediate instead of merely animated. */
+    val EaseOut = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+    val EaseInOut = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
+
+    /** Finger-down feedback must arrive before the finger comes back up. */
+    val Press: AnimationSpec<Float> = tween(durationMillis = 120, easing = EaseOut)
+
+    /** A state change with no spatial movement, used when the system disables animation. */
+    val Instant: AnimationSpec<Float> = snap()
+
+    /** Selection indicators move often, so they settle faster than page content. */
+    val Select: AnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 600f)
+
     /** Reposition, settle-back, list movement. Critically damped: no overshoot. */
     val Move: AnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 247f)   // response 0.40s
 

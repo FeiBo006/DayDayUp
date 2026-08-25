@@ -63,8 +63,8 @@ fun FocusRecordsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (m.isNeoBrutalist || m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        sheetMaxWidth = 640.dp,
+        containerColor = m.card,
     ) {
         Column(
             Modifier
@@ -116,7 +116,7 @@ private fun RecordRow(session: FocusSession, zone: ZoneId, onDelete: () -> Unit)
             .fillMaxWidth()
             .clip(shape)
             .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .styleBorder(shape, m.hairline)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

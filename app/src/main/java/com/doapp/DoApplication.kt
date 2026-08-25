@@ -12,9 +12,11 @@ import com.doapp.data.ReminderSettingsStore
 import com.doapp.data.TaskStore
 import com.doapp.notify.KeepAliveService
 import com.doapp.notify.Reminders
-import com.doapp.notify.TrashExpiry
 
 class DoApplication : Application() {
+
+    /** Process-only flag: replay on a real cold start, never because the Activity rotated. */
+    var entryShownInProcess: Boolean = false
 
     lateinit var tasks: TaskStore
         private set
@@ -33,11 +35,6 @@ class DoApplication : Application() {
         focus = FocusStore(this)
         createNotificationChannel()
         createKeepAliveChannel()
-        tasks.pruneExpiredTrash()
-        TrashExpiry.sync(this, tasks.tasks.value)
-        Reminders.syncAll(this, tasks.tasks.value)
-        // Anything that came due while the process was dead still gets said out loud.
-        Reminders.deliverMissed(this, tasks)
     }
 
     private fun createNotificationChannel() {

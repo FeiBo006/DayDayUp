@@ -35,3 +35,7 @@ data class Task(
     val hasReminder: Boolean get() = reminderAt != null
     val isTrashed: Boolean get() = deletedAt != null
 }
+
+/** Current store state is authoritative when an alarm arrives; stale intents are not. */
+fun Task.isReminderDue(now: Long): Boolean =
+    !done && !isTrashed && notifiedAt == null && reminderAt?.let { it <= now } == true

@@ -1,21 +1,20 @@
 package com.doapp.ui
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
@@ -27,7 +26,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.doapp.data.Appearance
-import com.doapp.ui.theme.materials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -45,17 +43,17 @@ data class WallpaperPreset(
 }
 
 val WallpaperPresets = listOf(
-    WallpaperPreset("sierra", "晨蓝", listOf(Color(0xFFA1C4FD), Color(0xFFC2E9FB)),
+    WallpaperPreset("sierra", "晨蓝", listOf(Color(0xFFDCE7F7)),
         accent = Color(0xFF3D7BD6), accentDark = Color(0xFF7FA8FF)),
-    WallpaperPreset("blush", "霞粉", listOf(Color(0xFFFFD3A5), Color(0xFFFD9CC4)),
+    WallpaperPreset("blush", "霞粉", listOf(Color(0xFFF6E2E8)),
         accent = Color(0xFFE5487C), accentDark = Color(0xFFFF7FA8)),
-    WallpaperPreset("mint", "薄荷", listOf(Color(0xFFB8F2C9), Color(0xFF8FD3F4)),
+    WallpaperPreset("mint", "薄荷", listOf(Color(0xFFDDEEE7)),
         accent = Color(0xFF1FA97E), accentDark = Color(0xFF5EDCB0)),
-    WallpaperPreset("sand", "暖沙", listOf(Color(0xFFFDF3E7), Color(0xFFE8D5C4)),
+    WallpaperPreset("sand", "暖沙", listOf(Color(0xFFF1E7DC)),
         accent = Color(0xFFC47A3C), accentDark = Color(0xFFE8A96E)),
-    WallpaperPreset("dusk", "暮色", listOf(Color(0xFF4B6CB7), Color(0xFF182848), Color(0xFF0B1020)),
+    WallpaperPreset("dusk", "暮色", listOf(Color(0xFF1F2937)),
         prefersDarkText = false, accent = Color(0xFF6C8CFF), accentDark = Color(0xFF8FA5FF)),
-    WallpaperPreset("graphite", "石墨", listOf(Color(0xFF3A3A3C), Color(0xFF1C1C1E)),
+    WallpaperPreset("graphite", "石墨", listOf(Color(0xFF2C2C2E)),
         prefersDarkText = false, accent = Color(0xFF8E8E93), accentDark = Color(0xFFAEAEB2)),
 )
 
@@ -68,64 +66,38 @@ fun presetOf(id: String): WallpaperPreset =
  */
 @Composable
 fun WallpaperBackground(appearance: Appearance, modifier: Modifier = Modifier) {
-    val m = materials
     val preset = presetOf(appearance.presetId)
-    val blurRadius by animateFloatAsState(
-        targetValue = appearance.blur * 40f,
-        animationSpec = tween(260),
-        label = "wallpaperBlur",
-    )
-    val scrim by animateColorAsState(
-        targetValue = Color.Black.copy(alpha = appearance.dim * 0.7f),
-        animationSpec = tween(260),
-        label = "wallpaperDim",
-    )
+    // Sliders are direct manipulation: the background follows the finger instead of chasing it
+    // through a 260 ms animation after every pointer update.
+    val blurRadius = appearance.blur * 40f
+    val scrim = Color.Black.copy(alpha = appearance.dim * 0.7f)
 
     Box(modifier.fillMaxSize()) {
-        if (m.isDoodle && !appearance.showsPhoto) {
-            NotebookPaperBackground(Modifier.fillMaxSize())
-        } else {
-            // A base fill under the photo: while the bitmap decodes there is never a white flash.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (m.isNeoBrutalist) Modifier.background(preset.colors.first())
-                        else Modifier.background(Brush.linearGradient(preset.colors))
-                    )
-            )
+        // Keep a solid color underneath the photo so decoding never causes a flash.
+        Box(Modifier.fillMaxSize().background(preset.colors.first()))
 
-            if (appearance.showsPhoto) {
-                val file = appearance.photoFile
-                val bitmap by produceState<ImageBitmap?>(initialValue = null, file?.absolutePath) {
-                    value = file?.let { decodeScaled(it) }
-                }
-                bitmap?.let {
-                    Image(
-                        bitmap = it,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            // Slight overscale so the blur never reveals a soft edge at the bounds.
-                            .graphicsLayer { scaleX = 1.06f; scaleY = 1.06f }
-                            .blur(blurRadius.dp),
-                    )
-                }
-            } else {
-                Box(
-                    Modifier
+        if (appearance.showsPhoto) {
+            val file = appearance.photoFile
+            var bitmap by remember(file?.absolutePath) {
+                mutableStateOf<ImageBitmap?>(null)
+            }
+            LaunchedEffect(file?.absolutePath) {
+                bitmap = file?.let { decodeScaled(it) }
+            }
+            bitmap?.let {
+                Image(
+                    bitmap = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
                         .fillMaxSize()
-                        .blur((blurRadius * 0.4f).dp)
-                        .then(
-                            if (m.isNeoBrutalist) Modifier.background(preset.colors.first())
-                            else Modifier.background(Brush.linearGradient(preset.colors))
-                        )
+                        .graphicsLayer { scaleX = 1.06f; scaleY = 1.06f }
+                        .blur(blurRadius.dp),
                 )
             }
-
-            Box(Modifier.fillMaxSize().background(scrim))
         }
+
+        Box(Modifier.fillMaxSize().background(scrim))
     }
 }
 

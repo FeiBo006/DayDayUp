@@ -1,9 +1,12 @@
 package com.doapp.data
 
 import android.content.Context
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -18,7 +21,8 @@ class FocusStore(context: Context) {
 
     private val file = AtomicJsonFile(File(context.filesDir, "focus.json"))
     private val prefs = context.getSharedPreferences("focus", Context.MODE_PRIVATE)
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val json = Json { ignoreUnknownKeys = true }
+    private val sessionsLock = Any()
 
     private val _sessions = MutableStateFlow(readSessions())
     val sessions: StateFlow<List<FocusSession>> = _sessions.asStateFlow()
@@ -87,26 +91,53 @@ class FocusStore(context: Context) {
             startedAt = current.startedAt,
             endedAt = current.startedAt + elapsed,
         )
-        persist(_sessions.value + session)
+        mutateSessions { it + session }
         return session
     }
 
     // — the log —
 
-    fun delete(id: String) = persist(_sessions.value.filterNot { it.id == id })
+    fun delete(id: String) = mutateSessions { list -> list.filterNot { it.id == id } }
 
     /** Merges an imported log, keeping local copies on an id clash. @return how many were added. */
     fun merge(incoming: List<FocusSession>): Int {
-        val known = _sessions.value.mapTo(mutableSetOf()) { it.id }
-        val added = incoming.filterNot { it.id in known }
-        if (added.isNotEmpty()) persist(_sessions.value + added)
-        return added.size
+        return queueMerge(incoming).added
     }
 
-    private fun persist(next: List<FocusSession>) {
-        _sessions.value = next.sortedBy { it.startedAt }
-        file.write(json.encodeToString(_sessions.value))
+    /** Merges on a worker thread and returns only after the imported snapshot reaches disk. */
+    suspend fun mergeAndAwait(incoming: List<FocusSession>): Int {
+        val operation = withContext(Dispatchers.Default) { queueMerge(incoming) }
+        operation.write?.await()
+        return operation.added
     }
+
+    private fun queueMerge(incoming: List<FocusSession>): MergeOperation =
+        synchronized(sessionsLock) {
+            val current = _sessions.value
+            val known = current.mapTo(mutableSetOf()) { it.id }
+            val added = distinctMissingById(incoming, known) { it.id }
+            val write = if (added.isEmpty()) null else persistLocked(current + added)
+            MergeOperation(added = added.size, write = write)
+        }
+
+    private fun mutateSessions(
+        block: (List<FocusSession>) -> List<FocusSession>,
+    ): Deferred<Unit>? = synchronized(sessionsLock) {
+        val current = _sessions.value
+        val next = block(current)
+        if (next == current) null else persistLocked(next)
+    }
+
+    private fun persistLocked(next: List<FocusSession>): Deferred<Unit> {
+        val sorted = next.sortedBy { it.startedAt }
+        _sessions.value = sorted
+        return file.write { json.encodeToString(sorted) }
+    }
+
+    private data class MergeOperation(
+        val added: Int,
+        val write: Deferred<Unit>?,
+    )
 
     private fun writeActive(next: ActiveFocus?) {
         _active.value = next

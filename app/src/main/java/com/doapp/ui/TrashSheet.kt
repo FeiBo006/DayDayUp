@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,7 +63,7 @@ fun TrashSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sorted = trashed.sortedByDescending { it.deletedAt ?: 0L }
     var confirmClear by remember { mutableStateOf(false) }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -74,8 +75,8 @@ fun TrashSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (m.isNeoBrutalist || m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        sheetMaxWidth = 640.dp,
+        containerColor = m.card,
         dragHandle = { TrashHandle() },
     ) {
         Column(
@@ -158,7 +159,7 @@ private fun TrashRow(
             .fillMaxWidth()
             .clip(shape)
             .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .styleBorder(shape, m.hairline)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

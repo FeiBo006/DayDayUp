@@ -1,11 +1,14 @@
 package com.doapp.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,22 +35,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.doapp.data.ActiveFocus
-import com.doapp.data.Appearance
 import com.doapp.data.FocusSession
 import com.doapp.data.FocusSlice
 import com.doapp.data.StatRange
+import com.doapp.data.dailyFocusSummaries
 import com.doapp.data.formatClock
 import com.doapp.data.formatDurationLong
 import com.doapp.data.formatDurationShort
@@ -55,7 +63,11 @@ import com.doapp.data.stepAnchor
 import com.doapp.data.summarize
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
+import kotlinx.coroutines.delay
+import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 private val DockClearanceFocus = 88.dp
 
@@ -70,24 +82,49 @@ private val DockClearanceFocus = 88.dp
 fun FocusScreen(
     sessions: List<FocusSession>,
     active: ActiveFocus?,
-    appearance: Appearance,
     onOpenTimer: () -> Unit,
     onOpenRecords: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val m = materials
-    var range by remember { mutableStateOf(StatRange.DAY) }
-    var anchor by remember { mutableStateOf(LocalDate.now()) }
-    var dayAnchor by remember { mutableStateOf(LocalDate.now()) }
+    var todayEpochDay by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
+    val today = LocalDate.ofEpochDay(todayEpochDay)
+    var rangeName by rememberSaveable { mutableStateOf(StatRange.WEEK.name) }
+    val range = runCatching { StatRange.valueOf(rangeName) }.getOrDefault(StatRange.WEEK)
+    var anchorEpochDay by rememberSaveable { mutableLongStateOf(todayEpochDay) }
+    val anchor = LocalDate.ofEpochDay(anchorEpochDay)
+    var selectedEpochDay by rememberSaveable { mutableLongStateOf(todayEpochDay) }
+    val selectedDate = LocalDate.ofEpochDay(selectedEpochDay)
+
+    // Keep the dashboard honest when it remains open across midnight.
+    LaunchedEffect(todayEpochDay) {
+        val now = LocalDateTime.now()
+        val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay()
+        delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
+        todayEpochDay = LocalDate.now().toEpochDay()
+    }
 
     val (from, to) = rangeBounds(range, anchor)
     val summary = remember(sessions, from, to) { summarize(sessions, from, to) }
-    val daySummary = remember(sessions, dayAnchor) { summarize(sessions, dayAnchor, dayAnchor) }
     val wedges = remember(summary) { foldSlices(summary.slices) }
 
-    Box(modifier.fillMaxSize()) {
-        WallpaperBackground(appearance)
+    val heatmapFrom = remember(today) { today.with(DayOfWeek.MONDAY).minusWeeks(11) }
+    val heatmapTo = remember(heatmapFrom) { heatmapFrom.plusDays(83) }
+    val heatmapDays = remember(sessions, heatmapFrom, heatmapTo) {
+        dailyFocusSummaries(sessions, heatmapFrom, heatmapTo)
+    }
+    val elapsedDays = remember(heatmapDays, today) { heatmapDays.filterNot { it.date.isAfter(today) } }
+    val todayMillis = elapsedDays.firstOrNull { it.date == today }?.totalMillis ?: 0L
+    val weekStart = remember(today) { today.with(DayOfWeek.MONDAY) }
+    val weekMillis = elapsedDays.filterNot { it.date.isBefore(weekStart) }.sumOf { it.totalMillis }
+    val activeDays = elapsedDays.count { it.totalMillis > 0L }
+    val dashboardSessions = elapsedDays.sumOf { it.sessionCount }
+    val trendDays = remember(elapsedDays, today) {
+        val start = today.minusDays(6)
+        elapsedDays.filter { !it.date.isBefore(start) && !it.date.isAfter(today) }
+    }
 
+    Box(modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -103,7 +140,7 @@ fun FocusScreen(
                 Column(Modifier.padding(bottom = 4.dp)) {
                     Text("专注", style = MaterialTheme.typography.displaySmall, color = m.label)
                     Text(
-                        "看看时间都花在了哪里",
+                        "把每天的投入，变成看得见的进步",
                         style = MaterialTheme.typography.bodyMedium,
                         color = m.secondaryLabel,
                         modifier = Modifier.padding(top = 2.dp),
@@ -115,12 +152,30 @@ fun FocusScreen(
                 RunningBanner(active = active, onClick = onOpenTimer)
             }
 
-            item(key = "today") {
-                DayCard(
-                    date = dayAnchor,
-                    count = daySummary.sessions,
-                    totalMillis = daySummary.totalMillis,
-                    onStep = { forward -> dayAnchor = dayAnchor.plusDays(if (forward) 1 else -1) },
+            item(key = "overview") {
+                StudyOverviewCard(
+                    todayMillis = todayMillis,
+                    weekMillis = weekMillis,
+                    activeDays = activeDays,
+                    sessionCount = dashboardSessions,
+                )
+            }
+
+            item(key = "heatmap") {
+                StudyHeatmapCard(
+                    days = heatmapDays,
+                    today = today,
+                    selectedDate = selectedDate,
+                    onSelectDate = { selectedEpochDay = it.toEpochDay() },
+                    onOpenRecords = onOpenRecords,
+                )
+            }
+
+            item(key = "trend") {
+                SevenDayTrendCard(
+                    days = trendDays,
+                    selectedDate = selectedDate,
+                    onSelectDate = { selectedEpochDay = it.toEpochDay() },
                 )
             }
 
@@ -131,8 +186,13 @@ fun FocusScreen(
                     to = to,
                     wedges = wedges,
                     totalMillis = summary.totalMillis,
-                    onRangeChange = { range = it },
-                    onStep = { forward -> anchor = stepAnchor(range, anchor, forward) },
+                    onRangeChange = {
+                        rangeName = it.name
+                        anchorEpochDay = todayEpochDay
+                    },
+                    onStep = { forward ->
+                        anchorEpochDay = stepAnchor(range, anchor, forward).toEpochDay()
+                    },
                     onOpenRecords = onOpenRecords,
                 )
             }
@@ -147,12 +207,12 @@ fun FocusScreen(
 @Composable
 private fun RunningBanner(active: ActiveFocus?, onClick: () -> Unit) {
     val m = materials
-    val shape = appShape(18.dp)
+    val shape = appShape(24.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.985f else 1f,
-        animationSpec = Motion.Snappy,
+        animationSpec = Motion.Press,
         label = "runningPress",
     )
 
@@ -160,10 +220,10 @@ private fun RunningBanner(active: ActiveFocus?, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .styleShadow(shape, elevation = if (m.isNeoBrutalist) 8.dp else 7.dp, spotColor = Color.Black.copy(alpha = 0.3f))
+            .styleShadow(shape, elevation = 3.dp, spotColor = Color.Black.copy(alpha = 0.16f))
             .clip(shape)
             .background(if (active != null) m.accent else m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .styleBorder(shape, if (active != null) m.accent else m.hairline)
             .pressableNoRipple(interactionSource, onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -205,63 +265,11 @@ private fun RunningBanner(active: ActiveFocus?, onClick: () -> Unit) {
                 modifier = Modifier.padding(top = 1.dp),
             )
         }
-    }
-}
-
-/** The headline: a stat tile, not a one-bar chart. */
-@Composable
-private fun DayCard(
-    date: LocalDate,
-    count: Int,
-    totalMillis: Long,
-    onStep: (Boolean) -> Unit,
-) {
-    val m = materials
-    val shape = appShape(18.dp)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        CardHeader(title = "当日专注", subtitle = date.toString(), onStep = onStep)
-        Row(Modifier.fillMaxWidth()) {
-            StatColumn(
-                caption = "次数",
-                value = count.toString(),
-                modifier = Modifier.weight(1f),
-            )
-            StatColumn(
-                caption = "时长",
-                value = if (totalMillis == 0L) "0 分钟" else formatDurationLong(totalMillis),
-                modifier = Modifier.weight(1f),
-                alignEnd = true,
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatColumn(
-    caption: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    alignEnd: Boolean = false,
-) {
-    val m = materials
-    Column(
-        modifier,
-        horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start,
-    ) {
-        Text(caption, style = MaterialTheme.typography.labelLarge, color = m.secondaryLabel)
-        Text(
-            value,
-            style = MaterialTheme.typography.displaySmall,
-            color = m.label,
-            modifier = Modifier.padding(top = 2.dp),
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = if (active != null) ink.copy(alpha = 0.72f) else m.tertiaryLabel,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -278,14 +286,12 @@ private fun DistributionCard(
     onOpenRecords: () -> Unit,
 ) {
     val m = materials
-    val shape = appShape(18.dp)
+    val shape = appShape(24.dp)
 
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .premiumSurface(shape = shape, elevation = 8.dp)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -403,7 +409,7 @@ private fun StepButton(forward: Boolean, onClick: () -> Unit) {
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = Motion.Snappy,
+        animationSpec = Motion.Press,
         label = "stepPress",
     )
     Box(
@@ -411,7 +417,7 @@ private fun StepButton(forward: Boolean, onClick: () -> Unit) {
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .size(34.dp)
             .clip(CircleShape)
-            .background(m.chrome.copy(alpha = if (m.isNeoBrutalist) 1f else 0.42f))
+            .background(m.chrome)
             .pressableNoRipple(interactionSource, onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -428,43 +434,61 @@ private fun StepButton(forward: Boolean, onClick: () -> Unit) {
 @Composable
 private fun RangeSegments(selected: StatRange, onSelect: (StatRange) -> Unit) {
     val m = materials
+    val reduceMotion = rememberReduceMotion()
     val options = listOf(
         StatRange.DAY to "日",
         StatRange.WEEK to "周",
         StatRange.MONTH to "月",
     )
-    Row(
+    val position = animateFloatAsState(
+        targetValue = options.indexOfFirst { it.first == selected }.coerceAtLeast(0).toFloat(),
+        animationSpec = if (reduceMotion) Motion.Instant else Motion.Select,
+        label = "rangeIndicator",
+    )
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .clip(appShape(11.dp))
             .background(if (m.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f))
             .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        options.forEach { (value, label) ->
-            val active = value == selected
-            val interactionSource = remember { MutableInteractionSource() }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(appShape(9.dp))
-                    .background(
-                        when {
-                            !active -> Color.Transparent
-                            m.isDark -> Color(0xFF48484A)
-                            else -> Color.White
-                        }
-                    )
-                    .pressableNoRipple(interactionSource) { onSelect(value) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active) m.label else m.secondaryLabel,
+        val gap = 2.dp
+        val segmentWidth = (maxWidth - gap * 2) / options.size
+        val stepPx = with(LocalDensity.current) { (segmentWidth + gap).toPx() }
+        Box(
+            Modifier
+                .width(segmentWidth)
+                .height(34.dp)
+                .graphicsLayer { translationX = stepPx * position.value }
+                .clip(appShape(9.dp))
+                .background(if (m.isDark) Color(0xFF48484A) else Color.White)
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.forEach { (value, label) ->
+                val active = value == selected
+                val interactionSource = remember { MutableInteractionSource() }
+                val foreground by animateColorAsState(
+                    targetValue = if (active) m.label else m.secondaryLabel,
+                    animationSpec = tween(130, easing = Motion.EaseOut),
+                    label = "rangeLabel",
                 )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .clip(appShape(9.dp))
+                        .pressableNoRipple(interactionSource) {
+                            if (!active) onSelect(value)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = foreground,
+                    )
+                }
             }
         }
     }

@@ -70,8 +70,8 @@ fun ReminderSettingsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (m.isNeoBrutalist || m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        sheetMaxWidth = 640.dp,
+        containerColor = m.card,
     ) {
         Column(
             Modifier
@@ -105,7 +105,7 @@ fun ReminderSettingsSheet(
             )
             AccessRow(
                 title = "电池优化",
-                detail = "受限时，息屏后的提醒会被推迟",
+                detail = "在系统列表中把 DayDayUp 设为不受限",
                 granted = state.battery,
                 onFix = { BackgroundAccess.openBatterySettings(context) },
             )
@@ -154,7 +154,7 @@ private fun AccessRow(
             .fillMaxWidth()
             .clip(shape)
             .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .styleBorder(shape, m.hairline)
             .pressableNoRipple(interactionSource, onFix)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -202,7 +202,7 @@ private fun ToggleRow(
             .fillMaxWidth()
             .clip(shape)
             .background(m.card)
-            .styleBorder(shape, m.topEdge, width = if (m.isNeoBrutalist) 3.dp else 1.dp)
+            .styleBorder(shape, m.hairline)
             .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

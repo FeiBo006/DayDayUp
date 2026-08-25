@@ -1,14 +1,16 @@
 package com.doapp.data
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * One JSON file on disk, written safely. Both stores in the app are this shape, and the care is
@@ -27,7 +29,7 @@ internal class AtomicJsonFile(private val file: File) {
     private val tempFile = File(file.parentFile, "${file.name}.tmp")
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writeLock = Mutex()
-    private var queuedVersion = 0L
+    private val queuedVersion = AtomicLong(0L)
     private var writtenVersion = 0L
 
     /** The file's contents, or null when it isn't there. */
@@ -42,31 +44,36 @@ internal class AtomicJsonFile(private val file: File) {
         runCatching { file.renameTo(File(file.parentFile, "${file.name}.corrupt")) }
     }
 
-    /** Queues a write. Callers are on the main thread, so the counter needs no synchronization. */
-    fun write(payload: String) {
-        val version = ++queuedVersion
-        io.launch {
+    /** Queues an already-built payload and returns a result that propagates write failures. */
+    fun write(payload: String): Deferred<Unit> = write { payload }
+
+    /**
+     * Queues a lazily-built payload. Assigning the version before serialization preserves mutation
+     * order while keeping JSON encoding off the caller thread. Awaiting the returned deferred means
+     * a snapshot at least this new has reached disk; an I/O failure is rethrown to the awaiter.
+     */
+    fun write(payload: () -> String): Deferred<Unit> {
+        val version = queuedVersion.incrementAndGet()
+        return io.async {
             writeLock.withLock {
                 if (version < writtenVersion) return@withLock
+                writeAtomically(payload())
                 writtenVersion = version
-                writeAtomically(payload)
             }
         }
     }
 
     private fun writeAtomically(payload: String) {
+        tempFile.writeText(payload)
         runCatching {
-            tempFile.writeText(payload)
-            runCatching {
-                Files.move(
-                    tempFile.toPath(),
-                    file.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            }.recoverCatching {
-                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            }.getOrThrow()
-        }
+            Files.move(
+                tempFile.toPath(),
+                file.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        }.recoverCatching {
+            Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }.getOrThrow()
     }
 }

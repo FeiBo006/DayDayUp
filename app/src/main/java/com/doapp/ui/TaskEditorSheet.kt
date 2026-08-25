@@ -52,13 +52,18 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -84,6 +89,7 @@ import java.time.ZoneOffset
 fun TaskEditorSheet(
     initial: Task?,
     defaultBucket: Bucket,
+    draftKey: Int,
     onDismiss: () -> Unit,
     onSave: (Task) -> Unit,
     onDelete: (Task) -> Unit,
@@ -92,37 +98,47 @@ fun TaskEditorSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var title by remember { mutableStateOf(initial?.title.orEmpty()) }
-    var note by remember { mutableStateOf(initial?.note.orEmpty()) }
-    var bucket by remember { mutableStateOf(initial?.bucket ?: defaultBucket) }
+    // The session key is stable across configuration changes and changes for every fresh open.
+    // That preserves an in-progress draft without leaking it into the next task or new-task sheet.
+    var title by rememberSaveable(draftKey) { mutableStateOf(initial?.title.orEmpty()) }
+    var note by rememberSaveable(draftKey) { mutableStateOf(initial?.note.orEmpty()) }
+    var bucket by rememberSaveable(draftKey) {
+        mutableStateOf(initial?.bucket ?: defaultBucket)
+    }
 
     val initialReminder = initial?.reminderAt?.toLocalDateTime()
-    val defaultReminder = remember { defaultReminderAt() }
-    var reminderOn by remember { mutableStateOf(initial?.reminderAt != null) }
-    var reminderDate by remember {
-        mutableStateOf(initialReminder?.toLocalDate() ?: defaultReminder.toLocalDate())
+    val defaultReminder = remember(draftKey) { defaultReminderAt() }
+    val initialReminderDate = initialReminder?.toLocalDate() ?: defaultReminder.toLocalDate()
+    val initialReminderTime = initialReminder?.toLocalTime() ?: defaultReminder.toLocalTime()
+    var reminderOn by rememberSaveable(draftKey) {
+        mutableStateOf(initial?.reminderAt != null)
     }
-    var reminderTime by remember {
-        mutableStateOf(initialReminder?.toLocalTime() ?: defaultReminder.toLocalTime())
+    var reminderDateEpochDay by rememberSaveable(draftKey) {
+        mutableLongStateOf(initialReminderDate.toEpochDay())
     }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var reminderMinuteOfDay by rememberSaveable(draftKey) {
+        mutableIntStateOf(initialReminderTime.hour * 60 + initialReminderTime.minute)
+    }
+    var showDatePicker by rememberSaveable(draftKey) { mutableStateOf(false) }
+    var showTimePicker by rememberSaveable(draftKey) { mutableStateOf(false) }
+    val reminderDate = LocalDate.ofEpochDay(reminderDateEpochDay)
+    val reminderTime = LocalTime.of(reminderMinuteOfDay / 60, reminderMinuteOfDay % 60)
     // A reminder in the past is dropped by Reminders.sync, so say so rather than showing a bell
     // on the row that will never ring.
     val reminderAt = LocalDateTime.of(reminderDate, reminderTime)
     val reminderIsPast = !reminderAt.isAfter(LocalDateTime.now())
 
     // The planned day only exists for Plan tasks; Today has no date picker on purpose.
-    var planDay by remember {
-        mutableStateOf(initial?.planDay ?: LocalDate.now().plusDays(1).toEpochDay())
+    var planDay by rememberSaveable(draftKey) {
+        mutableLongStateOf(initial?.planDay ?: LocalDate.now().plusDays(1).toEpochDay())
     }
-    var showPlanDatePicker by remember { mutableStateOf(false) }
+    var showPlanDatePicker by rememberSaveable(draftKey) { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
 
     // Set when a permission request came back empty-handed. On a permanently denied permission
     // the system shows no dialog at all, so without this the switch just snaps back with no
     // explanation and no way forward.
-    var notificationsDenied by remember { mutableStateOf(false) }
+    var notificationsDenied by rememberSaveable(draftKey) { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -142,9 +158,9 @@ fun TaskEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = 640.dp,
         // A solid surface: translucent-on-translucent would destroy legibility.
-        containerColor = if (m.isNeoBrutalist || m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        containerColor = m.card,
         dragHandle = { SheetHandle() },
     ) {
         Column(
@@ -369,8 +385,9 @@ fun TaskEditorSheet(
             confirmButton = {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let {
-                        reminderDate = LocalDateTime.ofEpochSecond(it / 1000, 0, ZoneOffset.UTC)
-                            .toLocalDate()
+                        reminderDateEpochDay =
+                            LocalDateTime.ofEpochSecond(it / 1000, 0, ZoneOffset.UTC)
+                                .toLocalDate().toEpochDay()
                     }
                     showDatePicker = false
                 }) { Text("好") }
@@ -391,7 +408,7 @@ fun TaskEditorSheet(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    reminderTime = LocalTime.of(state.hour, state.minute)
+                    reminderMinuteOfDay = state.hour * 60 + state.minute
                     showTimePicker = false
                 }) { Text("好") }
             },
@@ -538,12 +555,13 @@ private fun SheetHandle() {
 @Composable
 private fun SegmentedBuckets(selected: Bucket, onSelect: (Bucket) -> Unit) {
     val m = materials
+    val reduceMotion = rememberReduceMotion()
     val options = listOf(Bucket.TODAY to "Today", Bucket.LATER to "Plan")
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
-    var trackWidth by remember { mutableStateOf(0f) }
-    val fraction by animateFloatAsState(
+    var trackWidth by remember { mutableFloatStateOf(0f) }
+    val fraction = animateFloatAsState(
         targetValue = index.toFloat(),
-        animationSpec = Motion.Move,
+        animationSpec = if (reduceMotion) Motion.Instant else Motion.Select,
         label = "segmentIndicator",
     )
     val density = LocalDensity.current
@@ -553,16 +571,18 @@ private fun SegmentedBuckets(selected: Bucket, onSelect: (Bucket) -> Unit) {
             .fillMaxWidth()
             .clip(appShape(11.dp))
             .background(if (m.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f))
-            .then(if (m.isDoodle) Modifier.styleBorder(appShape(11.dp), m.topEdge) else Modifier)
+            .styleBorder(appShape(11.dp), m.hairline)
             .padding(2.dp)
             .onGloballyPositioned { trackWidth = it.size.width.toFloat() }
     ) {
         val segmentWidth = with(density) { (trackWidth / options.size).toDp() }
         Box(
             Modifier
-                .padding(start = segmentWidth * fraction)
                 .width(segmentWidth)
                 .height(34.dp)
+                .graphicsLayer {
+                    translationX = (trackWidth / options.size) * fraction.value
+                }
                 .clip(appShape(9.dp))
                 .background(if (m.isDark) Color(0xFF48484A) else Color.White)
         )
@@ -596,7 +616,7 @@ private fun ValueChip(label: String, onClick: () -> Unit) {
         Modifier
             .clip(appShape(9.dp))
             .background(if (m.isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.05f))
-            .then(if (m.isDoodle) Modifier.styleBorder(appShape(9.dp), m.topEdge) else Modifier)
+            .styleBorder(appShape(9.dp), m.hairline)
             .pressableNoRipple(interactionSource, onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
@@ -612,7 +632,7 @@ private fun DestructiveButton(onClick: () -> Unit) {
         Modifier
             .clip(appShape(14.dp))
             .background(m.destructive.copy(alpha = 0.12f))
-            .then(if (m.isDoodle) Modifier.styleBorder(appShape(14.dp), m.topEdge) else Modifier)
+            .styleBorder(appShape(14.dp), m.hairline)
             .pressableNoRipple(interactionSource, onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -630,23 +650,12 @@ private fun DestructiveButton(onClick: () -> Unit) {
 
 @Composable
 private fun PrimaryButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val m = materials
-    val interactionSource = remember { MutableInteractionSource() }
-    val alpha by animateFloatAsState(
-        targetValue = if (enabled) 1f else 0.35f,
-        animationSpec = Motion.Snappy,
-        label = "primaryEnabled",
+    AppPrimaryButton(
+        label = label,
+        enabled = enabled,
+        onClick = onClick,
+        modifier = Modifier.width(112.dp),
     )
-    Box(
-        Modifier
-            .clip(appShape(14.dp))
-            .background(m.accent.copy(alpha = alpha))
-            .then(if (m.isDoodle) Modifier.styleBorder(appShape(14.dp), m.topEdge) else Modifier)
-            .pressableNoRipple(interactionSource) { if (enabled) onClick() }
-            .padding(horizontal = 26.dp, vertical = 12.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = Color.White)
-    }
 }
 
 @Composable
@@ -657,8 +666,8 @@ private fun FieldSurface(padded: Boolean = true, content: @Composable () -> Unit
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (m.isDoodle) m.card else if (m.isDark) Color.White.copy(alpha = 0.07f) else Color.White)
-            .styleBorder(shape, m.topEdge)
+            .background(if (m.isDark) Color.White.copy(alpha = 0.07f) else Color.White)
+            .styleBorder(shape, m.hairline)
             .then(if (padded) Modifier.padding(horizontal = 14.dp, vertical = 12.dp) else Modifier)
     ) { content() }
 }

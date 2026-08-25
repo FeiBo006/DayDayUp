@@ -2,10 +2,17 @@ package com.doapp.data
 
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 private const val DEFAULT_SELF_REMINDER = "想做的事拖着不做，想去的地方不会等你，喜欢的人更不会一直等你。"
 
@@ -18,7 +25,6 @@ data class Appearance(
     val blur: Float = 0.25f,
     /** 0f..1f — how far the wallpaper is pushed back so text stays legible. */
     val dim: Float = 0.18f,
-    val styleId: String = AppearanceOptions.STYLE_SOFT,
     val fontId: String = AppearanceOptions.FONT_SYSTEM,
     val textColorId: String = AppearanceOptions.COLOR_DEFAULT,
     val selfReminder: String = DEFAULT_SELF_REMINDER,
@@ -38,8 +44,6 @@ class AppearanceStore(private val context: Context) {
             usePhoto = prefs.getBoolean(KEY_USE_PHOTO, false),
             blur = prefs.getFloat(KEY_BLUR, 0.25f),
             dim = prefs.getFloat(KEY_DIM, 0.18f),
-            styleId = prefs.getString(KEY_STYLE, AppearanceOptions.STYLE_SOFT)
-                ?: AppearanceOptions.STYLE_SOFT,
             fontId = prefs.getString(KEY_FONT, AppearanceOptions.FONT_SYSTEM)
                 ?: AppearanceOptions.FONT_SYSTEM,
             textColorId = prefs.getString(KEY_TEXT_COLOR, AppearanceOptions.COLOR_DEFAULT)
@@ -60,11 +64,27 @@ class AppearanceStore(private val context: Context) {
         previous?.delete()
     }
 
-    fun setBlur(value: Float) = write(_appearance.value.copy(blur = value))
+    fun previewBlur(value: Float) {
+        val clamped = value.coerceIn(0f, 1f)
+        if (_appearance.value.blur != clamped) {
+            _appearance.value = _appearance.value.copy(blur = clamped)
+        }
+    }
 
-    fun setDim(value: Float) = write(_appearance.value.copy(dim = value))
+    fun previewDim(value: Float) {
+        val clamped = value.coerceIn(0f, 1f)
+        if (_appearance.value.dim != clamped) {
+            _appearance.value = _appearance.value.copy(dim = clamped)
+        }
+    }
 
-    fun selectStyle(id: String) = write(_appearance.value.copy(styleId = id))
+    /** Sliders preview every frame; persist their final values once when the gesture ends. */
+    fun persistWallpaperAdjustments() {
+        prefs.edit()
+            .putFloat(KEY_BLUR, _appearance.value.blur)
+            .putFloat(KEY_DIM, _appearance.value.dim)
+            .apply()
+    }
 
     fun selectFont(id: String) = write(_appearance.value.copy(fontId = id))
 
@@ -76,19 +96,51 @@ class AppearanceStore(private val context: Context) {
      * Copies the picked image into app storage. The picker grants a one-shot read permission,
      * so keeping the Uri around would break on the next launch — we own the bytes instead.
      */
-    fun importPhoto(uri: Uri): Boolean {
-        val target = File(context.filesDir, "wallpaper_${System.currentTimeMillis()}.jpg")
-        val ok = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            } ?: return false
-        }.isSuccess
-        if (!ok) return false
+    suspend fun importPhoto(uri: Uri): Boolean {
+        val target = File(context.filesDir, "wallpaper_${UUID.randomUUID()}.jpg")
+        var committed = false
+        try {
+            val copied = withContext(Dispatchers.IO) {
+                try {
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: return@withContext false
+                    input.use { source ->
+                        target.outputStream().use { destination ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var total = 0L
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val count = source.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_PHOTO_BYTES) return@withContext false
+                                destination.write(buffer, 0, count)
+                            }
+                        }
+                    }
+                    true
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            if (!copied) return false
 
-        val previous = _appearance.value.photoFile
-        write(_appearance.value.copy(photoPath = target.absolutePath, usePhoto = true))
-        if (previous?.absolutePath != target.absolutePath) previous?.delete()
-        return true
+            val previous = _appearance.value.photoFile
+            write(_appearance.value.copy(photoPath = target.absolutePath, usePhoto = true))
+            committed = true
+            if (previous?.absolutePath != target.absolutePath) {
+                withContext(NonCancellable + Dispatchers.IO) { previous?.delete() }
+            }
+            return true
+        } finally {
+            // withContext(IO) promptly rethrows cancellation on the way back to Main. Always
+            // remove a copied-but-uncommitted target, even when the sheet that launched us left.
+            if (!committed) {
+                withContext(NonCancellable + Dispatchers.IO) { target.delete() }
+            }
+        }
     }
 
     private fun write(next: Appearance) {
@@ -99,7 +151,6 @@ class AppearanceStore(private val context: Context) {
             .putBoolean(KEY_USE_PHOTO, next.usePhoto)
             .putFloat(KEY_BLUR, next.blur)
             .putFloat(KEY_DIM, next.dim)
-            .putString(KEY_STYLE, next.styleId)
             .putString(KEY_FONT, next.fontId)
             .putString(KEY_TEXT_COLOR, next.textColorId)
             .putString(KEY_SELF_REMINDER, next.selfReminder)
@@ -107,12 +158,12 @@ class AppearanceStore(private val context: Context) {
     }
 
     private companion object {
+        const val MAX_PHOTO_BYTES = 32L * 1024L * 1024L
         const val KEY_PRESET = "preset"
         const val KEY_PHOTO = "photo"
         const val KEY_USE_PHOTO = "use_photo"
         const val KEY_BLUR = "blur"
         const val KEY_DIM = "dim"
-        const val KEY_STYLE = "style"
         const val KEY_FONT = "font"
         const val KEY_TEXT_COLOR = "text_color"
         const val KEY_SELF_REMINDER = "self_reminder"
@@ -120,10 +171,6 @@ class AppearanceStore(private val context: Context) {
 }
 
 object AppearanceOptions {
-    const val STYLE_SOFT = "soft"
-    const val STYLE_NEO_BRUTALIST = "neo-brutalist"
-    const val STYLE_DOODLE = "doodle"
-
     const val FONT_SYSTEM = "system"
     const val FONT_SERIF = "serif"
     const val FONT_MONO = "mono"

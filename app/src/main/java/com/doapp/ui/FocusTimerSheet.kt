@@ -1,7 +1,11 @@
 package com.doapp.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -32,16 +36,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,8 +92,8 @@ fun FocusTimerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (m.isNeoBrutalist || m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        sheetMaxWidth = 640.dp,
+        containerColor = m.card,
     ) {
         Column(
             Modifier
@@ -128,7 +137,8 @@ private fun StartFocus(
 
     var selected by remember(candidates) { mutableStateOf(candidates.firstOrNull()) }
     var mode by remember { mutableStateOf(FocusMode.STOPWATCH) }
-    var minutes by remember { mutableStateOf(25) }
+    var minutes by remember { mutableIntStateOf(25) }
+    var customLabel by rememberSaveable { mutableStateOf("") }
 
     Text("开始专注", style = MaterialTheme.typography.headlineSmall, color = m.label)
 
@@ -153,6 +163,14 @@ private fun StartFocus(
             }
         }
     }
+
+    Text("学习内容", style = MaterialTheme.typography.bodyMedium, color = m.secondaryLabel)
+    FocusLabelField(
+        value = customLabel,
+        onValueChange = { customLabel = it },
+        placeholder = selected?.let { "细化“${it.title}”（可选）" }
+            ?: "例如：高数第二章、英语听力",
+    )
 
     Text("方式", style = MaterialTheme.typography.bodyMedium, color = m.secondaryLabel)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -188,7 +206,7 @@ private fun StartFocus(
         onClick = {
             val task = selected
             onStart(
-                task?.title ?: "专注",
+                customLabel.trim().ifBlank { task?.title ?: "自由学习" },
                 task?.id,
                 mode,
                 if (mode == FocusMode.COUNTDOWN) minutes * 60_000L else 0L,
@@ -201,6 +219,55 @@ private fun StartFocus(
         style = MaterialTheme.typography.labelLarge,
         color = m.tertiaryLabel,
     )
+}
+
+@Composable
+private fun FocusLabelField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+) {
+    val m = materials
+    val shape = appShape(12.dp)
+    var focused by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) m.accent else m.topEdge,
+        animationSpec = tween(160),
+        label = "focusLabelBorder",
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(m.chrome)
+            .styleBorder(
+                shape,
+                borderColor,
+                width = if (focused) 1.5.dp else 1.dp,
+            )
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+    ) {
+        if (value.isBlank()) {
+            Text(
+                placeholder,
+                style = MaterialTheme.typography.bodyLarge,
+                color = m.tertiaryLabel,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = { onValueChange(it.take(80)) },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = m.label),
+            cursorBrush = SolidColor(m.accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focused = it.isFocused },
+        )
+    }
 }
 
 @Composable
@@ -331,7 +398,7 @@ private fun FocusChip(
     // Feedback on press, not release — waiting for the lift reads as lag.
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = Motion.Snappy,
+        animationSpec = Motion.Press,
         label = "focusChipPress",
     )
     val tint = when {
@@ -348,10 +415,10 @@ private fun FocusChip(
                 when {
                     selected -> m.accent
                     destructive -> m.destructive.copy(alpha = 0.12f)
-                    else -> m.chrome.copy(alpha = if (m.isNeoBrutalist) 1f else 0.40f)
+                    else -> m.chrome
                 }
             )
-            .styleBorder(shape, if (m.isNeoBrutalist) Color.Black else m.topEdge)
+            .styleBorder(shape, m.hairline)
             .pressableNoRipple(interactionSource, onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
@@ -367,25 +434,9 @@ private fun FocusChip(
 
 @Composable
 private fun FocusPrimaryButton(label: String, onClick: () -> Unit) {
-    val m = materials
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = Motion.Snappy,
-        label = "focusPrimaryPress",
+    AppPrimaryButton(
+        label = label,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
     )
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(appShape(14.dp))
-            .background(m.accent)
-            .styleBorder(appShape(14.dp), if (m.isNeoBrutalist) Color.Black else m.topEdge)
-            .pressableNoRipple(interactionSource, onClick)
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = onColor(m.accent))
-    }
 }

@@ -27,6 +27,12 @@ object Notifications {
             != PackageManager.PERMISSION_GRANTED
         ) return false
 
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (!manager.areNotificationsEnabled()) return false
+        if (manager.getNotificationChannel(Reminders.CHANNEL_ID)?.importance ==
+            NotificationManager.IMPORTANCE_NONE
+        ) return false
+
         val body = note?.takeIf { it.isNotBlank() }
             ?: if (late) "这条提醒没能准时送达" else "到时间了，记得完成这件事"
 
@@ -51,8 +57,8 @@ object Notifications {
             .setShowWhen(true)
             .build()
 
-        context.getSystemService(NotificationManager::class.java)
-            .notify(taskId.hashCode(), notification)
-        return true
+        return runCatching {
+            manager.notify(taskId.hashCode(), notification)
+        }.isSuccess
     }
 }

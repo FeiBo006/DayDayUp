@@ -15,18 +15,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.doapp.ui.theme.materials
@@ -34,81 +28,38 @@ import com.doapp.ui.theme.materials
 /** Readable foreground for use on top of [color]: black on light colors, white on dark. */
 fun onColor(color: Color): Color = if (color.luminance() > 0.5f) Color.Black else Color.White
 
-/** Ink for hand-drawn strokes; marker teal for the hard offset shadow. */
-private val DoodleInk = Color(0xFF2C2C2C)
-private val DoodleShadowColor = Color(0xFF4ECDC4)
-
-/**
- * Shadow that becomes a hard marker offset (no blur) in doodle style, a normal elevation
- * everywhere else. Call where you would call [androidx.compose.ui.draw.shadow].
- */
-@Composable
+/** A restrained shadow used only where elevation communicates navigation or active state. */
 fun Modifier.styleShadow(
     shape: Shape,
     elevation: Dp,
     spotColor: Color,
     ambientColor: Color = spotColor,
 ): Modifier {
-    val m = materials
-    return if (m.isDoodle) doodleShadow() else this.shadow(elevation, shape, ambientColor = ambientColor, spotColor = spotColor)
+    return this.shadow(elevation, shape, ambientColor = ambientColor, spotColor = spotColor)
 }
 
-/**
- * Border that becomes a dashed hand-drawn stroke in doodle style, a normal border everywhere
- * else. Call where you would call [androidx.compose.foundation.border].
- */
-@Composable
+/** A consistent hairline border for the single minimal visual language. */
 fun Modifier.styleBorder(
     shape: Shape,
     color: Color,
     width: Dp = 1.dp,
 ): Modifier {
-    val m = materials
-    return if (m.isDoodle) doodleBorder(width = width) else this.border(width, color, shape)
-}
-
-/** Hard offset shadow — a flat marker swipe instead of a soft blur. */
-fun Modifier.doodleShadow(offset: Dp = 4.dp, cornerRadius: Dp = 5.dp): Modifier = drawBehind {
-    drawRoundRect(
-        color = DoodleShadowColor,
-        topLeft = Offset(offset.toPx(), offset.toPx()),
-        size = size,
-        cornerRadius = CornerRadius(cornerRadius.toPx()),
-    )
-}
-
-/** Dashed stroke, like a pen line that lifts off the paper. */
-fun Modifier.doodleBorder(
-    color: Color = DoodleInk,
-    width: Dp = 1.5.dp,
-    cornerRadius: Dp = 5.dp,
-    dash: Dp = 12.dp,
-    gap: Dp = 7.dp,
-): Modifier = drawBehind {
-    val stroke = Stroke(
-        width = width.toPx(),
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), gap.toPx())),
-    )
-    drawRoundRect(color = color, style = stroke, cornerRadius = CornerRadius(cornerRadius.toPx()))
+    return this.border(width, color, shape)
 }
 
 /**
- * A tap target with press feedback but no Material ripple — the card's own scale is the feedback.
- * Every tap lands a haptic tick too, so any functional control announces itself in the hand.
+ * A tap target with no Material ripple. Visual press feedback belongs to the surface using this
+ * modifier; haptics stay reserved for meaningful thresholds such as completing or committing.
  */
 @Composable
 fun Modifier.pressableNoRipple(
     interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
 ): Modifier {
-    val haptics = LocalHapticFeedback.current
     return this.clickable(
         interactionSource = interactionSource,
         indication = null,
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        },
+        onClick = onClick,
     )
 }
 
@@ -126,7 +77,7 @@ fun CompletionCircle(
     val reduceMotion = rememberReduceMotion()
     val fill by animateFloatAsState(
         targetValue = if (done) 1f else 0f,
-        animationSpec = if (reduceMotion) Motion.Snappy else Motion.Momentum,
+        animationSpec = if (reduceMotion) Motion.Instant else Motion.Momentum,
         label = "completionFill",
     )
     val interactionSource = remember { MutableInteractionSource() }
@@ -145,9 +96,11 @@ fun CompletionCircle(
                 style = Stroke(width = 1.6.dp.toPx()),
                 alpha = 1f - fill,
             )
-            if (fill > 0f) {
-                drawCircle(color = m.success, radius = radius * fill)
-            }
+            drawCircle(
+                color = m.success,
+                radius = radius * (0.88f + 0.12f * fill),
+                alpha = fill,
+            )
         }
         Icon(
             imageVector = Icons.Rounded.Check,
@@ -157,8 +110,8 @@ fun CompletionCircle(
                 .size(15.dp)
                 .graphicsLayer {
                     alpha = fill
-                    scaleX = fill
-                    scaleY = fill
+                    scaleX = 0.86f + 0.14f * fill
+                    scaleY = 0.86f + 0.14f * fill
                 },
         )
     }

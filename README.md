@@ -1,185 +1,155 @@
 # DayDayUp
 
-DayDayUp 是一个基于 Jetpack Compose 开发的 Android 待办应用。它将任务分为 `Today` 和 `Plan` 两个时间范围，并提供提醒、壁纸、主题样式和回收站等功能。
+一款为 Android 手机与平板设计的极简待办与专注应用。
+
+把今天要做的事、以后要做的事和真正投入的时间放在同一个地方。没有复杂层级，没有多余入口，打开就能开始。
+
+> 当前版本 `1.1` · 支持 Android 8.0 及以上系统
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/home.png" width="30%" alt="DayDayUp 启动页" />
+  <img src="docs/screenshots/do.png" width="30%" alt="DayDayUp 任务主页" />
+  <img src="docs/screenshots/focus.png" width="30%" alt="DayDayUp 专注主页" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/task-editor.png" width="30%" alt="DayDayUp 新建任务" />
+  <img src="docs/screenshots/focus-timer.png" width="30%" alt="DayDayUp 专注计时" />
+  <img src="docs/screenshots/settings.png" width="30%" alt="DayDayUp 设置页" />
+</p>
 
 ## 功能
 
-- 创建、编辑、完成和删除任务
-- 将任务放入 `Today` 或 `Plan`
-- 为 `Plan` 任务设置计划日期，到期后自动显示在 `Today`
-- 为任务设置系统通知提醒
-- 应用重启、设备重启或应用更新后恢复提醒
-- 已删除任务进入回收站，保留 7 天后自动清理
-- 使用内置壁纸或从相册选择自定义图片
-- 调整壁纸模糊和压暗程度
-- 切换柔和、粗野主义和手绘涂鸦风格
-- 切换系统、衬线和等宽字体
-- 自定义文字颜色和首页自我提醒
+### Today：只看今天
+
+- 集中展示今天仍需完成的任务
+- 任务完成后即时更新今日进度与百分比
+- 已完成任务保留在当天列表中，状态一目了然
+- 过期的 Plan 任务自动进入 Today，不会被遗忘
+- 空状态保持干净，不使用多余提示打扰
+
+### Plan：把以后留给以后
+
+- 将暂时不需要处理的事项放入 Plan
+- 可为计划任务选择具体日期
+- 到达计划日期后自动归入 Today
+- Today 与 Plan 可以在编辑任务时随时切换
+- 计划日期、提醒时间和备注直接显示在任务摘要中
+
+### 完整的任务操作
+
+- 快速创建任务
+- 添加可选备注
+- 编辑任务内容与所属列表
+- 一键标记完成或恢复未完成
+- 设置通知提醒
+- 删除的任务先进入回收站，避免误操作
+- 回收站内容支持恢复、永久删除和自动清理
+
+### 专注计时
+
+- 支持正计时，适合开放式学习或工作
+- 支持倒计时，适合番茄钟和固定时长任务
+- 专注时可填写学习内容，也可以直接开始
+- 可以把一次专注关联到已有任务
+- 计时过程中支持暂停、继续、完成和取消
+- 倒计时结束后通过系统提醒通知
+- 不足一分钟的短暂误触不会写入正式记录
+
+### 专注记录
+
+- 汇总当天累计专注时长
+- 显示当天完成的专注次数
+- 按学习内容统计时间分布
+- 保留最近的专注记录
+- 可进入全部记录查看历史内容
+- 支持删除不需要的专注记录
+
+### 提醒与后台恢复
+
+- 使用 Android 系统通知发送任务提醒
+- 支持精确闹钟，尽量在设定时刻触发
+- 设备重启后重新同步未完成提醒
+- 应用更新后自动恢复提醒计划
+- 提供通知、闹钟和电池策略状态检查
+- 针对不同 Android 厂商提供自启动与后台设置入口
+
+### 备份与恢复
+
+- 将任务和专注记录导出为 JSON 文件
+- 从已有 DayDayUp 备份中导入数据
+- 导入时按记录 ID 合并，避免重复覆盖
+- 适合换机、重装或在多台设备之间手动迁移
+
+### 外观
+
+- 纯色、无渐变的极简视觉语言
+- 内置多种背景，也可从相册选择图片
+- 支持调整背景模糊程度和压暗强度
+- 状态栏、导航栏和页面背景保持统一
+
+### 动画与交互
+
+- 保留 DayDayUp 字标开机动画
+- 启动页使用简洁的几何循环动画
+- Dock 应用采用类似手机打开 App 的空间过渡
+- 再次点击当前 Dock 图标即可返回白色启动页
+- 页面切换、按钮按压和任务状态变化均带有轻量反馈
+- 自动尊重系统“减少动态效果”设置
+
+### Android 平板适配
+
+- 根据可用宽度自动切换手机与宽屏布局
+- 宽屏设备采用双栏内容，减少无意义的纵向滚动
+- 页面内容设置合理的最大宽度，避免在大屏上过度拉伸
+- Dock 在手机和平板上始终保持居中和舒适触控尺寸
+- 自动处理状态栏、导航栏与横竖屏安全区域
+
+## 设计原则
+
+DayDayUp 只保留三处主要入口：
+
+- **Do**：管理今天和未来的任务
+- **专注**：开始计时并查看投入记录
+- **设置**：处理提醒、壁纸、备份与回收站
+
+界面以白色、黑色和少量功能色为主。页面之间保持一致的空间关系，常用操作靠近拇指可触区域，次要信息降低视觉权重，让任务本身始终成为重点。
 
 ## 技术栈
 
 - Kotlin
 - Jetpack Compose
 - Material 3
-- AndroidX
+- AndroidX Lifecycle
 - Kotlinx Serialization
-- Gradle Version Catalog
+- Gradle Kotlin DSL
 
-## 环境要求
+## 本地运行
 
-- Android Studio Hedgehog 或更高版本
-- JDK 17
-- Android SDK Platform 35
-- Android SDK Build-Tools 35
-- Android 8.0（API 26）或更高版本的设备/模拟器
+使用 Android Studio 打开项目，等待 Gradle 同步完成后运行 `app` 配置即可。
 
-项目当前配置为：
-
-| 项目 | 配置 |
-| --- | --- |
-| `compileSdk` | 35 |
-| `targetSdk` | 35 |
-| `minSdk` | 26 |
-| `applicationId` | `com.doapp` |
-| `versionName` | `1.0` |
-
-## 使用 Android Studio 运行
-
-1. 用 Android Studio 打开项目根目录。
-2. 等待 Gradle 同步完成。
-3. 连接 Android 设备，或启动一个 API 26 以上的模拟器。
-4. 选择 `app` 运行配置。
-5. 点击 Run，或使用 Android Studio 的运行按钮安装应用。
-
-首次打开提醒功能时，应用可能需要以下系统权限：
-
-- 通知权限
-- 精确闹钟权限
-- 忽略电池优化限制
-
-如果没有授予这些权限，提醒仍可能被系统延迟，或者完全无法显示。
-
-## 命令行构建
-
-Windows PowerShell：
+Windows 命令行构建：
 
 ```powershell
 .\gradlew.bat assembleDebug
 ```
 
-macOS/Linux：
+macOS 或 Linux：
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-Debug APK 默认输出到：
+Debug APK 输出位置：
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-安装到已连接的 Android 设备：
+运行单元测试：
 
 ```powershell
-.\gradlew.bat installDebug
+.\gradlew.bat testDebugUnitTest
 ```
-
-项目目前还没有单元测试，`app/src/` 下只有 `main` 源集。补测试时新建 `app/src/test/java/`，再用 `.\gradlew.bat test` 运行。
-
-## 数据存储
-
-应用数据保存在 Android 应用私有目录中，不会写入项目目录：
-
-- 任务：`tasks.json`
-- 外观与提醒设置：`SharedPreferences`
-- 自定义壁纸：应用私有文件目录中的图片文件
-
-卸载应用会同时清除这些本地数据。当前项目没有云同步功能。
-
-### 备份
-
-「设置 → 备份」可以把任务导出成一个 JSON 文件，位置由系统文件选择器决定，因此不会随应用一起被卸载。导入采用**按 id 合并**：已存在的任务保持不变，只补进缺少的，所以导入不会覆盖现有数据。
-
-## 正式签名
-
-Android 只允许用**同一个密钥签名**的安装包覆盖安装。签名对不上时只能先卸载，而卸载会带走 `tasks.json`。所以要长期更新而不丢数据，必须用固定的密钥库签 release 包。
-
-生成一次密钥库（之后务必备份好，**丢了就再也无法覆盖更新已安装的版本**）：
-
-```powershell
-keytool -genkeypair -v -keystore daydayup.jks -alias daydayup -keyalg RSA -keysize 2048 -validity 10000
-```
-
-把 `keystore.properties.example` 复制成 `keystore.properties` 并填入密码。该文件已被 `.gitignore` 排除。
-
-```powershell
-.\gradlew.bat assembleRelease
-```
-
-产物在 `app/build/outputs/apk/release/app-release.apk`。没有 `keystore.properties` 时构建不会失败，只会产出 `app-release-unsigned.apk`。
-
-每次准备安装的构建都要提高 `app/build.gradle.kts` 里的 `versionCode`，否则系统会拒绝安装。
-
-> 注意：从当前的 debug 签名切换到正式签名时，**这一次仍然需要卸载重装**。切换前先用「设置 → 备份 → 导出」保存数据。
-
-## 目录结构
-
-```text
-.
-├── app/
-│   └── src/main/
-│       ├── java/com/doapp/
-│       │   ├── data/       # 任务和外观数据
-│       │   ├── notify/     # 提醒、广播接收器和回收站清理
-│       │   └── ui/         # Compose 页面、组件和主题
-│       └── res/            # Android 资源
-├── gradle/
-│   ├── libs.versions.toml  # 依赖和插件版本
-│   └── wrapper/            # Gradle Wrapper
-├── tools/
-│   └── emulator.ps1        # 当前电脑上的可选模拟器启动脚本
-├── build.gradle.kts
-├── settings.gradle.kts
-├── gradle.properties
-├── gradlew
-├── gradlew.bat
-└── README.md
-```
-
-## 上传到 GitHub
-
-项目已经是 Git 仓库，主分支为 `main`。关联远程仓库并推送：
-
-```powershell
-git remote add origin https://github.com/<你的用户名>/<你的仓库名>.git
-git push -u origin main
-```
-
-把命令中的仓库地址替换成你自己的 GitHub 仓库地址即可。
-
-上传前可以检查将要提交的文件：
-
-```powershell
-git status
-git ls-files
-```
-
-## 不建议上传的文件
-
-以下内容已经由 `.gitignore` 排除，不需要手动提交：
-
-- `local.properties`：包含本机 Android SDK 路径
-- `.gradle/`、`.kotlin/`、`build/`：Gradle、Kotlin 和 Android 构建缓存/产物
-- `.idea/`：Android Studio 的个人工作区配置
-- `.codegraph/`：代码索引数据库和运行日志
-- `.reasonix/`、`reasonix.toml`：本地工具数据和配置
-- `*.apk`、`*.aab`、`mapping/`：构建输出
-- `*.jks`、`*.keystore`、`keystore.properties`：应用签名材料
-- `.env*`、`google-services.json`：可能包含密钥或环境配置
-
-`tools/emulator.ps1` 可以保留，但它写死了当前电脑的模拟器名称和项目路径，不适合作为通用开发脚本。其他开发者应直接使用 Android Studio，或根据自己的模拟器配置修改该脚本。
-
-## 许可证
-
-当前项目尚未声明开源许可证。如果准备公开仓库，建议根据你的授权意愿补充 `LICENSE` 文件，例如 MIT、Apache-2.0 或 GPL-3.0。

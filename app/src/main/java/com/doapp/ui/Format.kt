@@ -6,8 +6,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -33,24 +31,24 @@ fun formatReminder(epochMillis: Long): String {
 
 /** The header subtitle: "7月27日 星期日". */
 fun formatToday(date: LocalDate = LocalDate.now()): String {
-    val weekday = date.dayOfWeek.getDisplayName(
-        java.time.format.TextStyle.FULL,
-        Locale.getDefault(),
-    )
-    return "${date.monthValue}月${date.dayOfMonth}日 $weekday"
+    return "${date.monthValue}月${date.dayOfMonth}日 ${date.chineseWeekday(full = true)}"
 }
 
 /** A plan-day label: "明天", "8月3日 周五" … Relative where it helps, absolute elsewhere. */
 fun formatPlanDay(epochDay: Long): String {
     val date = LocalDate.ofEpochDay(epochDay)
     val today = LocalDate.now()
-    val weekday = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
     return when (date) {
         today -> "今天"
         today.plusDays(1) -> "明天"
         today.minusDays(1) -> "昨天"
-        else -> "${date.monthValue}月${date.dayOfMonth}日 $weekday"
+        else -> "${date.monthValue}月${date.dayOfMonth}日 ${date.chineseWeekday(full = false)}"
     }
+}
+
+private fun LocalDate.chineseWeekday(full: Boolean): String {
+    val day = listOf("一", "二", "三", "四", "五", "六", "日")[dayOfWeek.value - 1]
+    return if (full) "星期$day" else "周$day"
 }
 
 fun formatDate(dateTime: LocalDateTime): String =

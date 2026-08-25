@@ -33,7 +33,6 @@ object BackgroundAccess {
     }
 
     fun batteryUnrestricted(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         return runCatching {
             context.getSystemService(PowerManager::class.java)
                 ?.isIgnoringBatteryOptimizations(context.packageName) ?: true
@@ -56,11 +55,9 @@ object BackgroundAccess {
     }
 
     fun openBatterySettings(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         launch(
             context,
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
         )
     }
 

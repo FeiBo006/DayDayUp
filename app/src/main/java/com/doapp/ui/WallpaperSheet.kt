@@ -38,11 +38,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.doapp.data.Appearance
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
+import kotlinx.coroutines.launch
 
 /**
  * Wallpaper picker. Personalization is the point — the list is the same, but it should be able
@@ -60,23 +63,39 @@ import com.doapp.ui.theme.materials
 fun WallpaperSheet(
     appearance: Appearance,
     onSelectPreset: (String) -> Unit,
-    onPickPhoto: (android.net.Uri) -> Unit,
+    onPickPhoto: suspend (android.net.Uri) -> Boolean,
     onBlurChange: (Float) -> Unit,
     onDimChange: (Float) -> Unit,
+    onAdjustmentsFinished: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val m = materials
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var importingPhoto by remember { mutableStateOf(false) }
+    var photoImportFailed by remember { mutableStateOf(false) }
 
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
-    ) { uri -> uri?.let(onPickPhoto) }
+    ) { uri ->
+        if (uri != null && !importingPhoto) {
+            scope.launch {
+                importingPhoto = true
+                photoImportFailed = false
+                try {
+                    photoImportFailed = !onPickPhoto(uri)
+                } finally {
+                    importingPhoto = false
+                }
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (m.isDoodle) m.card
-        else if (m.isDark) Color(0xFF1C1C1E) else Color(0xFFF7F7F9),
+        sheetMaxWidth = 640.dp,
+        containerColor = m.card,
     ) {
         Column(
             Modifier
@@ -98,6 +117,7 @@ fun WallpaperSheet(
             ) {
                 PhotoTile(
                     selected = appearance.showsPhoto,
+                    loading = importingPhoto,
                     onClick = {
                         photoPicker.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -110,6 +130,7 @@ fun WallpaperSheet(
                         preset = preset,
                         selected = !appearance.showsPhoto && appearance.presetId == preset.id,
                         onClick = { onSelectPreset(preset.id) },
+                        enabled = !importingPhoto,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -124,6 +145,7 @@ fun WallpaperSheet(
                         preset = preset,
                         selected = !appearance.showsPhoto && appearance.presetId == preset.id,
                         onClick = { onSelectPreset(preset.id) },
+                        enabled = !importingPhoto,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -138,6 +160,7 @@ fun WallpaperSheet(
                         preset = preset,
                         selected = !appearance.showsPhoto && appearance.presetId == preset.id,
                         onClick = { onSelectPreset(preset.id) },
+                        enabled = !importingPhoto,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -147,14 +170,21 @@ fun WallpaperSheet(
                 }
             }
 
-            LabelledSlider("模糊", appearance.blur, onBlurChange)
-            LabelledSlider("变暗", appearance.dim, onDimChange)
+            LabelledSlider("模糊", appearance.blur, onBlurChange, onAdjustmentsFinished)
+            LabelledSlider("变暗", appearance.dim, onDimChange, onAdjustmentsFinished)
 
             Text(
                 "模糊和变暗决定文字有多好读 —— 照片越花，越该往右调。",
                 style = MaterialTheme.typography.labelLarge,
                 color = m.secondaryLabel,
             )
+            if (photoImportFailed) {
+                Text(
+                    "图片未能导入，请换一张不超过 32 MB 的图片。",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = m.destructive,
+                )
+            }
         }
     }
 }
@@ -164,16 +194,19 @@ private fun PresetTile(
     preset: WallpaperPreset,
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    TileFrame(selected = selected, onClick = onClick, modifier = modifier) {
+    TileFrame(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+    ) {
         Box(
             Modifier
                 .matchParentSize()
-                .then(
-                    if (materials.isNeoBrutalist) Modifier.background(preset.colors.first())
-                    else Modifier.background(Brush.linearGradient(preset.colors))
-                )
+                .background(preset.colors.first())
         )
         Text(
             text = preset.name,
@@ -186,9 +219,19 @@ private fun PresetTile(
 }
 
 @Composable
-private fun PhotoTile(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PhotoTile(
+    selected: Boolean,
+    loading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val m = materials
-    TileFrame(selected = selected, onClick = onClick, modifier = modifier) {
+    TileFrame(
+        selected = selected,
+        onClick = onClick,
+        enabled = !loading,
+        modifier = modifier,
+    ) {
         Box(
             Modifier
                 .matchParentSize()
@@ -204,7 +247,7 @@ private fun PhotoTile(selected: Boolean, onClick: () -> Unit, modifier: Modifier
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "相册",
+                    if (loading) "导入中…" else "相册",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = m.accent,
@@ -218,6 +261,7 @@ private fun PhotoTile(selected: Boolean, onClick: () -> Unit, modifier: Modifier
 private fun TileFrame(
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
 ) {
@@ -232,6 +276,7 @@ private fun TileFrame(
 
     Box(
         modifier
+            .graphicsLayer { alpha = if (enabled) 1f else 0.55f }
             .aspectRatio(0.78f)
             .clip(shape)
             .border(
@@ -239,7 +284,7 @@ private fun TileFrame(
                 color = m.accent.copy(alpha = ring),
                 shape = shape,
             )
-            .pressableNoRipple(interactionSource, onClick)
+            .pressableNoRipple(interactionSource) { if (enabled) onClick() }
     ) {
         content()
         if (ring > 0f) {
@@ -248,7 +293,11 @@ private fun TileFrame(
                     .align(Alignment.TopEnd)
                     .padding(6.dp)
                     .size(18.dp)
-                    .graphicsLayer { alpha = ring; scaleX = ring; scaleY = ring }
+                    .graphicsLayer {
+                        alpha = ring
+                        scaleX = 0.86f + 0.14f * ring
+                        scaleY = 0.86f + 0.14f * ring
+                    }
                     .clip(CircleShape)
                     .background(m.accent),
                 contentAlignment = Alignment.Center,
@@ -265,7 +314,12 @@ private fun TileFrame(
 }
 
 @Composable
-private fun LabelledSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+private fun LabelledSlider(
+    label: String,
+    value: Float,
+    onChange: (Float) -> Unit,
+    onChangeFinished: () -> Unit,
+) {
     val m = materials
     Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -280,6 +334,7 @@ private fun LabelledSlider(label: String, value: Float, onChange: (Float) -> Uni
         Slider(
             value = value,
             onValueChange = onChange,
+            onValueChangeFinished = onChangeFinished,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = m.accent,

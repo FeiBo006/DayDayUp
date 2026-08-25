@@ -33,6 +33,15 @@ data class FocusSummary(
     }
 }
 
+/** One calendar day of study, including the exact sessions that explain its total. */
+data class DailyFocusSummary(
+    val date: LocalDate,
+    val sessions: List<FocusSession>,
+) {
+    val totalMillis: Long get() = sessions.sumOf { it.durationMillis }
+    val sessionCount: Int get() = sessions.size
+}
+
 /**
  * The dates a range covers, given the date it is anchored on. Weeks run Monday to Sunday.
  * [StatRange.CUSTOM] ignores the anchor and uses the explicit bounds, ordered defensively so a
@@ -97,6 +106,41 @@ fun summarize(
         }
 
     return FocusSummary(sessions = inRange.size, totalMillis = total, slices = slices)
+}
+
+/**
+ * Builds a continuous calendar series, including empty days so charts never collapse gaps.
+ * Sessions are ordered chronologically inside each day for the "what did I do" detail.
+ */
+fun dailyFocusSummaries(
+    sessions: List<FocusSession>,
+    from: LocalDate,
+    to: LocalDate,
+    zone: ZoneId = ZoneId.systemDefault(),
+): List<DailyFocusSummary> {
+    val start = minOf(from, to)
+    val end = maxOf(from, to)
+    val grouped = sessions.groupBy { session ->
+        Instant.ofEpochMilli(session.startedAt).atZone(zone).toLocalDate()
+    }
+
+    return generateSequence(start) { day ->
+        day.plusDays(1).takeUnless { it.isAfter(end) }
+    }.map { day ->
+        DailyFocusSummary(
+            date = day,
+            sessions = grouped[day].orEmpty().sortedBy { it.startedAt },
+        )
+    }.toList()
+}
+
+/** Fixed, meaningful heat levels: a colour always represents the same amount of study. */
+fun focusIntensity(totalMillis: Long): Int = when {
+    totalMillis <= 0L -> 0
+    totalMillis < 30L * 60_000L -> 1
+    totalMillis < 60L * 60_000L -> 2
+    totalMillis < 120L * 60_000L -> 3
+    else -> 4
 }
 
 /** "9 小时 3 分钟" — the long form, for totals that want to be read carefully. */
