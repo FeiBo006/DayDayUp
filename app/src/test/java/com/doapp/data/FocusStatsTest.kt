@@ -42,6 +42,21 @@ class FocusStatsTest {
     }
 
     @Test
+    fun sameVisibleLabelIsShownOnceWithCombinedDuration() {
+        val sessions = listOf(
+            session("a", "代码", "2026-08-23T01:00:00Z", 1),
+            session("b", " 代码 ", "2026-08-23T02:00:00Z", 1),
+            session("c", "阅读", "2026-08-23T03:00:00Z", 1),
+        )
+
+        val slices = aggregateFocusLabels(sessions)
+
+        assertEquals(listOf("代码", "阅读"), slices.map { it.label })
+        assertEquals(2L * 60_000L, slices.first().millis)
+        assertEquals(1, slices.count { it.label == "代码" })
+    }
+
+    @Test
     fun dailySeriesKeepsEmptyDaysAndSessionDetails() {
         val sessions = listOf(
             session("a", "写作", "2026-08-21T01:00:00Z", 20),

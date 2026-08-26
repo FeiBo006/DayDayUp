@@ -20,6 +20,13 @@
   <img src="docs/screenshots/settings.png" width="30%" alt="DayDayUp 设置页" />
 </p>
 
+### 专注统计
+
+<p align="center">
+  <img src="docs/screenshots/focus-insights-phone.png" width="30%" alt="DayDayUp 手机端专注热力图与同名内容合并" />
+  <img src="docs/screenshots/focus-insights-tablet.png" width="62%" alt="DayDayUp 安卓平板专注统计双栏布局" />
+</p>
+
 ## 功能
 
 ### Today：只看今天
@@ -62,9 +69,15 @@
 
 - 汇总当天累计专注时长
 - 显示当天完成的专注次数
-- 按学习内容统计时间分布
-- 保留最近的专注记录
+- 按学习内容统计时间分布与累计时长
+- 使用近 12 周活跃热力图展示学习频率
+- 使用近 14 天堆叠柱状图展示每日专注趋势
+- 不同学习内容使用固定颜色区分，图例同步显示各自总时长
+- 名称相同的专注自动合并，只保留一项并累加时长
+- 名称前后的多余空格会被忽略，例如两次“代码”各 1 分钟最终显示为“代码 2 分钟”
+- 最近 30 天汇总按总时长排序
 - 可进入全部记录查看历史内容
+- 汇总数据合并显示，原始专注记录仍逐条保留
 - 支持删除不需要的专注记录
 
 ### 提醒与后台恢复

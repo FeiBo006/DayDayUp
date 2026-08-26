@@ -40,6 +40,34 @@ data class DailyFocusSummary(
 ) {
     val totalMillis: Long get() = sessions.sumOf { it.durationMillis }
     val sessionCount: Int get() = sessions.size
+    val slices: List<FocusSlice> get() = aggregateFocusLabels(sessions)
+}
+
+/**
+ * Combines finished sessions that share the same visible name.
+ *
+ * Imported histories may contain accidental leading or trailing spaces, so labels are trimmed
+ * before grouping. The result is sorted by total duration and each name appears exactly once.
+ * Raw sessions remain untouched for the audit/delete screen.
+ */
+fun aggregateFocusLabels(sessions: List<FocusSession>): List<FocusSlice> {
+    if (sessions.isEmpty()) return emptyList()
+
+    val grouped = linkedMapOf<String, Long>()
+    sessions.forEach { session ->
+        val label = session.label.trim().ifBlank { FocusStore.DEFAULT_LABEL }
+        grouped[label] = grouped.getOrDefault(label, 0L) + session.durationMillis
+    }
+    val total = grouped.values.sum()
+    return grouped.entries
+        .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
+        .map { (label, millis) ->
+            FocusSlice(
+                label = label,
+                millis = millis,
+                fraction = if (total == 0L) 0f else millis.toFloat() / total,
+            )
+        }
 }
 
 /**
@@ -93,17 +121,7 @@ fun summarize(
     if (inRange.isEmpty()) return FocusSummary.Empty
 
     val total = inRange.sumOf { it.durationMillis }
-    val slices = inRange
-        .groupBy { it.label }
-        .map { (label, group) -> label to group.sumOf { it.durationMillis } }
-        .sortedByDescending { it.second }
-        .map { (label, millis) ->
-            FocusSlice(
-                label = label,
-                millis = millis,
-                fraction = if (total == 0L) 0f else millis.toFloat() / total,
-            )
-        }
+    val slices = aggregateFocusLabels(inRange)
 
     return FocusSummary(sessions = inRange.size, totalMillis = total, slices = slices)
 }

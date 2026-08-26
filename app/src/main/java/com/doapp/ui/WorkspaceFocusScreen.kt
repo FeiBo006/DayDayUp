@@ -25,15 +25,14 @@ import androidx.compose.ui.unit.dp
 import com.doapp.data.ActiveFocus
 import com.doapp.data.FocusMode
 import com.doapp.data.FocusSession
+import com.doapp.data.FocusSlice
 import com.doapp.data.FocusSummary
 import com.doapp.data.formatClock
 import com.doapp.data.formatDurationLong
 import com.doapp.data.formatDurationShort
 import com.doapp.data.summarize
 import kotlinx.coroutines.delay
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 
 @Composable
 fun WorkspaceFocusScreen(
@@ -45,7 +44,9 @@ fun WorkspaceFocusScreen(
 ) {
     val today = LocalDate.now()
     val summary = remember(sessions, today) { summarize(sessions, today, today) }
-    val recent = remember(sessions) { sessions.sortedByDescending { it.startedAt }.take(4) }
+    val recent = remember(sessions, today) {
+        summarize(sessions, today.minusDays(29), today).slices.take(4)
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(active) {
         while (active != null) {
@@ -77,14 +78,32 @@ fun WorkspaceFocusScreen(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     RecordsButton(onOpenRecords)
-                    RecentFocusPanel(recent, today)
+                    RecentFocusPanel(recent)
                 }
             }
         } else {
             active?.let { running -> ActiveFocusPanel(running, now, onOpenTimer) }
             TodayFocusPanel(summary)
             RecordsButton(onOpenRecords)
-            RecentFocusPanel(recent, today)
+            RecentFocusPanel(recent)
+        }
+
+        if (wide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+                WorkspaceHeatmapPanel(
+                    sessions = sessions,
+                    today = today,
+                    modifier = Modifier.weight(1f),
+                )
+                WorkspaceDailyTrendPanel(
+                    sessions = sessions,
+                    today = today,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        } else {
+            WorkspaceHeatmapPanel(sessions = sessions, today = today)
+            WorkspaceDailyTrendPanel(sessions = sessions, today = today)
         }
     }
 }
@@ -133,9 +152,9 @@ private fun RecordsButton(onOpenRecords: () -> Unit) {
 }
 
 @Composable
-private fun RecentFocusPanel(recent: List<FocusSession>, today: LocalDate) {
+private fun RecentFocusPanel(recent: List<FocusSlice>) {
     WorkspacePanel {
-        Text("最近", color = WorkspaceColors.Ink, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("最近 30 天", color = WorkspaceColors.Ink, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         if (recent.isEmpty()) {
             Text(
                 "完成一次专注后，记录会出现在这里。",
@@ -144,14 +163,13 @@ private fun RecentFocusPanel(recent: List<FocusSession>, today: LocalDate) {
                 modifier = Modifier.padding(top = 14.dp),
             )
         } else {
-            recent.forEachIndexed { index, session ->
+            recent.forEachIndexed { index, slice ->
                 if (index > 0) WorkspaceDivider()
-                val date = Instant.ofEpochMilli(session.startedAt).atZone(ZoneId.systemDefault()).toLocalDate()
                 WorkspaceRow(
-                    title = session.label,
-                    subtitle = if (date == today) "今天" else "${date.monthValue}月${date.dayOfMonth}日",
+                    title = slice.label,
+                    subtitle = "同名专注已合并",
                     trailing = {
-                        Text(formatDurationShort(session.durationMillis), color = WorkspaceColors.Secondary, style = MaterialTheme.typography.labelLarge)
+                        Text(formatDurationShort(slice.millis), color = WorkspaceColors.Secondary, style = MaterialTheme.typography.labelLarge)
                     },
                 )
             }
