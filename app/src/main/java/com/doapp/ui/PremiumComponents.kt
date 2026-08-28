@@ -57,7 +57,7 @@ fun AppPrimaryButton(
     enabled: Boolean = true,
 ) {
     val m = materials
-    val shape = appShape(16.dp)
+    val shape = appShape(12.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -75,7 +75,7 @@ fun AppPrimaryButton(
             .clip(shape)
             .background(m.accent)
             .then(if (enabled) Modifier.pressableNoRipple(interactionSource, onClick) else Modifier)
-            .heightIn(min = 54.dp),
+            .heightIn(min = 50.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

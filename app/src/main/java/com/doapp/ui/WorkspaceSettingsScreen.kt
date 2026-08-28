@@ -53,14 +53,14 @@ fun WorkspaceSettingsScreen(
         ).count { !it }
     }
 
-    WorkspacePage(modifier) { wide ->
+    WorkspacePage(modifier) { layout ->
         WorkspaceHeader(
             eyebrow = "DayDayUp / Settings",
             title = "设置",
             subtitle = "只保留真正会用到的选项",
         )
 
-        if (wide) {
+        if (layout.usesWideColumns) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f)) {
                     ApplicationSettingsPanel(reminderIssues, trashedCount, onOpenReminderSettings, onOpenWallpaper, onOpenTrash)

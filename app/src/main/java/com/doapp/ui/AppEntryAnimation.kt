@@ -151,7 +151,7 @@ private fun BrandLetter(letter: Char, index: Int, reduceMotion: Boolean) {
         style = MaterialTheme.typography.displaySmall.copy(
             fontSize = 48.sp,
             lineHeight = 56.sp,
-            letterSpacing = (-1.2).sp,
+            letterSpacing = 0.sp,
         ),
         color = m.label,
         modifier = Modifier.graphicsLayer {

@@ -44,29 +44,38 @@ import androidx.compose.ui.unit.dp
 
 enum class AppPage { LANDING, DO, FOCUS, SETTINGS }
 
+internal object DockMetrics {
+    val HorizontalPadding = 28.dp
+    val MaxWidth = 520.dp
+    val Height = 72.dp
+    val BottomGap = 10.dp
+    val ContentGap = 40.dp
+    val ReservedBottomPadding = Height + BottomGap + ContentGap
+}
+
 @Composable
 fun DockBar(
     current: AppPage,
     onSelect: (AppPage) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(26.dp)
+    val shape = RoundedCornerShape(22.dp)
     Row(
         modifier
-            .padding(horizontal = 28.dp)
-            .widthIn(max = 520.dp)
+            .padding(horizontal = DockMetrics.HorizontalPadding)
+            .widthIn(max = DockMetrics.MaxWidth)
             .fillMaxWidth()
-            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 10.dp)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + DockMetrics.BottomGap)
             .shadow(
-                elevation = 10.dp,
+                elevation = 6.dp,
                 shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.08f),
-                spotColor = Color.Black.copy(alpha = 0.14f),
+                ambientColor = Color.Black.copy(alpha = 0.05f),
+                spotColor = Color.Black.copy(alpha = 0.10f),
             )
             .clip(shape)
-            .background(Color.White.copy(alpha = 0.98f))
+            .background(Color.White)
             .border(1.dp, Color(0xFFE4E6E9), shape)
-            .height(76.dp)
+            .height(DockMetrics.Height)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -131,8 +140,8 @@ private fun DockApp(
         Box(
             Modifier
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .size(38.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(iconColor),
             contentAlignment = Alignment.Center,
         ) {

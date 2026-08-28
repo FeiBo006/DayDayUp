@@ -47,7 +47,7 @@ fun WorkspaceHomeScreen(
     onCompose: (Bucket) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val today = LocalDate.now()
+    val today = rememberWorkspaceToday()
     val groups = remember(tasks, today) { groupHomeTasks(tasks, today.toEpochDay()) }
     val openCount = groups.todayOpen.size
     val doneCount = groups.todayDone.size
@@ -58,7 +58,7 @@ fun WorkspaceHomeScreen(
         label = "workspaceTodayProgress",
     )
 
-    WorkspacePage(modifier) { wide ->
+    WorkspacePage(modifier) { layout ->
         WorkspaceHeader(
             eyebrow = "DayDayUp / Do",
             title = "今天",
@@ -113,7 +113,7 @@ fun WorkspaceHomeScreen(
                 }
         }
 
-        if (wide) {
+        if (layout.usesWideColumns) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(Modifier.weight(1f)) {
                     TodaySection(groups, today, openCount, onCompose, onToggle, onOpenTask)
@@ -221,17 +221,30 @@ private fun WorkspaceTaskRow(task: Task, onToggle: () -> Unit, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val toggleInteraction = remember { MutableInteractionSource() }
+        val togglePressed by toggleInteraction.collectIsPressedAsState()
+        val toggleScale by animateFloatAsState(
+            targetValue = if (togglePressed) 0.94f else 1f,
+            animationSpec = Motion.Press,
+            label = "workspaceTaskTogglePress",
+        )
         Box(
             Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(if (task.done) WorkspaceColors.Ink else Color.Transparent)
-                .border(1.5.dp, if (task.done) WorkspaceColors.Ink else WorkspaceColors.Tertiary, CircleShape)
+                .size(44.dp)
                 .pressableNoRipple(toggleInteraction, onToggle),
             contentAlignment = Alignment.Center,
         ) {
-            if (task.done) {
-                Icon(Icons.Rounded.Check, contentDescription = "完成", tint = Color.White, modifier = Modifier.size(18.dp))
+            Box(
+                Modifier
+                    .graphicsLayer { scaleX = toggleScale; scaleY = toggleScale }
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (task.done) WorkspaceColors.Ink else Color.Transparent)
+                    .border(1.5.dp, if (task.done) WorkspaceColors.Ink else WorkspaceColors.Tertiary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (task.done) {
+                    Icon(Icons.Rounded.Check, contentDescription = "完成", tint = Color.White, modifier = Modifier.size(17.dp))
+                }
             }
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -266,12 +279,19 @@ private fun WorkspaceTaskRow(task: Task, onToggle: () -> Unit, onClick: () -> Un
 @Composable
 private fun MiniAddButton(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = Motion.Press,
+        label = "workspaceMiniAddPress",
+    )
     Box(
         Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .size(44.dp)
+            .clip(RoundedCornerShape(9.dp))
             .background(Color.White)
-            .border(1.dp, WorkspaceColors.Line, RoundedCornerShape(10.dp))
+            .border(1.dp, WorkspaceColors.Line, RoundedCornerShape(9.dp))
             .pressableNoRipple(interaction, onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.doapp.data.DailyFocusSummary
 import com.doapp.data.FocusSession
 import com.doapp.data.FocusSlice
@@ -285,6 +286,7 @@ private fun TrendDay(
         Text(
             text = if (showDate) day.date.dayOfMonth.toString() else "",
             style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
             color = WorkspaceColors.Tertiary,
             maxLines = 1,
             modifier = Modifier.padding(top = 7.dp),

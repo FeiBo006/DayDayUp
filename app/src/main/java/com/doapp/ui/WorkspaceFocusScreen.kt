@@ -32,7 +32,6 @@ import com.doapp.data.formatDurationLong
 import com.doapp.data.formatDurationShort
 import com.doapp.data.summarize
 import kotlinx.coroutines.delay
-import java.time.LocalDate
 
 @Composable
 fun WorkspaceFocusScreen(
@@ -42,7 +41,7 @@ fun WorkspaceFocusScreen(
     onOpenRecords: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val today = LocalDate.now()
+    val today = rememberWorkspaceToday()
     val summary = remember(sessions, today) { summarize(sessions, today, today) }
     val recent = remember(sessions, today) {
         summarize(sessions, today.minusDays(29), today).slices.take(4)
@@ -55,7 +54,7 @@ fun WorkspaceFocusScreen(
         }
     }
 
-    WorkspacePage(modifier) { wide ->
+    WorkspacePage(modifier) { layout ->
         WorkspaceHeader(
                 eyebrow = "DayDayUp / Focus",
                 title = "专注",
@@ -70,7 +69,7 @@ fun WorkspaceFocusScreen(
                 },
         )
 
-        if (wide) {
+        if (layout.usesWideColumns) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     active?.let { ActiveFocusPanel(it, now, onOpenTimer) }
@@ -88,7 +87,7 @@ fun WorkspaceFocusScreen(
             RecentFocusPanel(recent)
         }
 
-        if (wide) {
+        if (layout.usesWideColumns) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
                 WorkspaceHeatmapPanel(
                     sessions = sessions,

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 internal object WorkspaceColors {
     val Canvas = Color.White
@@ -59,15 +60,24 @@ internal object WorkspaceColors {
 @Composable
 internal fun WorkspacePage(
     modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.(wide: Boolean) -> Unit,
+    content: @Composable ColumnScope.(layout: WorkspaceLayout) -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(WorkspaceColors.Canvas)) {
-        val wide = maxWidth >= 720.dp
-        val horizontalPadding = if (wide) 32.dp else 20.dp
+        val layout = classifyWorkspace(maxWidth.value.roundToInt(), maxHeight.value.roundToInt())
+        val horizontalPadding = when (layout) {
+            WorkspaceLayout.PHONE -> 20.dp
+            WorkspaceLayout.TABLET_PORTRAIT -> 24.dp
+            WorkspaceLayout.TABLET_LANDSCAPE -> 32.dp
+        }
+        val contentMaxWidth = when (layout) {
+            WorkspaceLayout.PHONE -> 640.dp
+            WorkspaceLayout.TABLET_PORTRAIT -> 840.dp
+            WorkspaceLayout.TABLET_LANDSCAPE -> 1120.dp
+        }
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .widthIn(max = 1120.dp)
+                .widthIn(max = contentMaxWidth)
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
@@ -76,12 +86,13 @@ internal fun WorkspacePage(
                         start = horizontalPadding,
                         end = horizontalPadding,
                         top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp,
-                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp,
+                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                            DockMetrics.ReservedBottomPadding,
                     ),
                 ),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
         ) {
-            content(wide)
+            content(layout)
         }
     }
 }
@@ -125,7 +136,7 @@ internal fun WorkspacePanel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier
             .fillMaxWidth()
@@ -152,7 +163,7 @@ internal fun WorkspaceActionButton(
         animationSpec = Motion.Press,
         label = "workspaceActionPress",
     )
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
 
     Row(
         modifier
@@ -160,7 +171,7 @@ internal fun WorkspaceActionButton(
             .clip(shape)
             .background(color)
             .pressableNoRipple(interactionSource, onClick)
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -206,9 +217,9 @@ internal fun WorkspaceRow(
             Box(
                 Modifier
                     .size(38.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.White)
-                    .border(1.dp, WorkspaceColors.Line, RoundedCornerShape(10.dp)),
+                    .border(1.dp, WorkspaceColors.Line, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(it, contentDescription = null, tint = WorkspaceColors.Ink, modifier = Modifier.size(20.dp))

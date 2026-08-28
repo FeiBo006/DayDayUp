@@ -14,12 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
 @Composable
@@ -32,11 +29,7 @@ fun AppOpenTransition(
     var displayed by remember {
         mutableStateOf(current.takeUnless { it == AppPage.LANDING } ?: AppPage.DO)
     }
-    var visited by remember {
-        mutableStateOf(
-            current.takeUnless { it == AppPage.LANDING }?.let(::setOf) ?: emptySet(),
-        )
-    }
+    var hasOpenedPage by remember { mutableStateOf(current != AppPage.LANDING) }
     val progress = remember {
         Animatable(if (current == AppPage.LANDING) 0f else 1f)
     }
@@ -50,7 +43,7 @@ fun AppOpenTransition(
                 if (reduceMotion) tween(90) else spring(dampingRatio = 1f, stiffness = 650f),
             )
         } else {
-            val firstVisit = current !in visited
+            val firstOpen = !hasOpenedPage
             if (displayed != current && progress.value > 0.98f) {
                 // Switching Dock apps is peer navigation, not another launch. Fade through the
                 // shared white canvas so the GPU never has to blend two full-screen pages.
@@ -59,22 +52,22 @@ fun AppOpenTransition(
                     tween(if (reduceMotion) 35 else 55, easing = Motion.EaseOut),
                 )
                 displayed = current
-                if (firstVisit) visited = visited + current
+                hasOpenedPage = true
                 pageProgress.animateTo(
                     1f,
                     tween(if (reduceMotion) 55 else 90, easing = Motion.EaseOut),
                 )
             } else {
-                pageProgress.snapTo(if (firstVisit) 0f else 1f)
+                pageProgress.snapTo(if (firstOpen) 0f else 1f)
                 displayed = current
+                hasOpenedPage = true
                 progress.animateTo(
                     1f,
                     if (reduceMotion) tween(100) else spring(dampingRatio = 1f, stiffness = 520f),
                 )
-                if (firstVisit) {
+                if (firstOpen) {
                     // Compose on the now-stationary white surface, then reveal. Any unavoidable
                     // first-use class loading cannot tear an in-flight transform this way.
-                    visited = visited + current
                     pageProgress.animateTo(
                         1f,
                         tween(if (reduceMotion) 55 else 90, easing = Motion.EaseOut),
@@ -85,8 +78,9 @@ fun AppOpenTransition(
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        if (visited.isNotEmpty() || current != AppPage.LANDING) {
-            val dockWidth = (maxWidth - 56.dp).coerceAtMost(520.dp)
+        if (hasOpenedPage && (current != AppPage.LANDING || progress.value > 0.001f)) {
+            val dockWidth = (maxWidth - DockMetrics.HorizontalPadding - DockMetrics.HorizontalPadding)
+                .coerceAtMost(DockMetrics.MaxWidth)
             val dockLeft = (maxWidth - dockWidth) / 2
             val iconFraction = when (displayed) {
                 AppPage.DO -> 1f / 6f
@@ -110,25 +104,13 @@ fun AppOpenTransition(
                     }
                     .background(Color.White),
             ) {
-                visited.forEach { page ->
-                        val visible = page == displayed
-                        val visibilityModifier = if (visible) {
-                            Modifier
-                                .zIndex(2f)
-                                .graphicsLayer { alpha = pageProgress.value }
-                        } else {
-                            Modifier
-                                .zIndex(0f)
-                                .drawWithContent { /* Keep composition warm without drawing it. */ }
-                                .clearAndSetSemantics { }
-                        }
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .then(visibilityModifier),
-                        ) {
-                            content(page)
-                        }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(2f)
+                        .graphicsLayer { alpha = pageProgress.value },
+                ) {
+                    content(displayed)
                 }
             }
         }
