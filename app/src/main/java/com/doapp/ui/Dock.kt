@@ -7,7 +7,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -45,11 +43,11 @@ import androidx.compose.ui.unit.dp
 enum class AppPage { LANDING, DO, FOCUS, SETTINGS }
 
 internal object DockMetrics {
-    val HorizontalPadding = 28.dp
-    val MaxWidth = 520.dp
-    val Height = 72.dp
-    val BottomGap = 10.dp
-    val ContentGap = 40.dp
+    val HorizontalPadding = 44.dp
+    val MaxWidth = 420.dp
+    val Height = 58.dp
+    val BottomGap = 12.dp
+    val ContentGap = 28.dp
     val ReservedBottomPadding = Height + BottomGap + ContentGap
 }
 
@@ -59,7 +57,7 @@ fun DockBar(
     onSelect: (AppPage) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(20.dp)
     Row(
         modifier
             .padding(horizontal = DockMetrics.HorizontalPadding)
@@ -67,24 +65,23 @@ fun DockBar(
             .fillMaxWidth()
             .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + DockMetrics.BottomGap)
             .shadow(
-                elevation = 6.dp,
+                elevation = 8.dp,
                 shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.05f),
-                spotColor = Color.Black.copy(alpha = 0.10f),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.08f),
             )
             .clip(shape)
             .background(Color.White)
-            .border(1.dp, Color(0xFFE4E6E9), shape)
+            .border(1.dp, Color(0xFFE7E9EC), shape)
             .height(DockMetrics.Height)
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 5.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DockApp(
             page = AppPage.DO,
             label = "Do",
             icon = Icons.Rounded.CheckCircle,
-            iconColor = Color(0xFF17191C),
             selected = current == AppPage.DO,
             onClick = { onSelect(AppPage.DO) },
             modifier = Modifier.weight(1f),
@@ -93,7 +90,6 @@ fun DockBar(
             page = AppPage.FOCUS,
             label = "专注",
             icon = Icons.Rounded.Timer,
-            iconColor = Color(0xFF22A06B),
             selected = current == AppPage.FOCUS,
             onClick = { onSelect(AppPage.FOCUS) },
             modifier = Modifier.weight(1f),
@@ -102,7 +98,6 @@ fun DockBar(
             page = AppPage.SETTINGS,
             label = "设置",
             icon = Icons.Rounded.Settings,
-            iconColor = Color(0xFF667085),
             selected = current == AppPage.SETTINGS,
             onClick = { onSelect(AppPage.SETTINGS) },
             modifier = Modifier.weight(1f),
@@ -115,7 +110,6 @@ private fun DockApp(
     page: AppPage,
     label: String,
     icon: ImageVector,
-    iconColor: Color,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -128,38 +122,29 @@ private fun DockApp(
         label = "dockAppPress-${page.name}",
     )
 
-    Column(
+    Row(
         modifier
             .semantics { role = Role.Button }
-            .clip(RoundedCornerShape(18.dp))
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(15.dp))
+            .background(if (selected) Color(0xFFF1F2F4) else Color.Transparent)
             .pressableNoRipple(interactionSource, onClick)
-            .padding(vertical = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .graphicsLayer { scaleX = scale; scaleY = scale }
-                .size(38.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconColor),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(22.dp))
-        }
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (selected) Color(0xFF17191C) else Color(0xFF858B93),
+            modifier = Modifier.size(21.dp),
+        )
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color(0xFF17191C) else Color(0xFF7A8088),
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        Box(
-            Modifier
-                .padding(top = 2.dp)
-                .size(3.dp)
-                .clip(CircleShape)
-                .background(if (selected) Color(0xFF17191C) else Color.Transparent),
+            color = if (selected) Color(0xFF17191C) else Color(0xFF858B93),
+            modifier = Modifier.padding(start = 7.dp),
         )
     }
 }

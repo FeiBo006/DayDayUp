@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.doapp.data.Appearance
 import com.doapp.data.BackupFile
 import com.doapp.data.Bucket
+import com.doapp.data.FocusMode
 import com.doapp.notify.FocusAlarm
 import com.doapp.notify.KeepAliveService
 import com.doapp.notify.Reminders
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
 
@@ -137,13 +139,25 @@ private fun App(app: DoApplication, appearance: Appearance, showEntry: Boolean) 
             AppPage.DO -> WorkspaceHomeScreen(
                 tasks = tasks,
                 onToggle = { task ->
-                    app.tasks.setDone(task.id, !task.done)?.let { Reminders.sync(context, it) }
+                    app.tasks.setDone(task.id, !task.done).forEach { Reminders.sync(context, it) }
                 },
                 onOpenTask = { task ->
                     editorTaskId = task.id
                     editorBucketName = task.bucket.name
                     editorSession += 1
                     editorOpen = true
+                },
+                onMoveToday = { task, direction ->
+                    val todayEpochDay = LocalDate.now().toEpochDay()
+                    app.tasks.moveToday(task.id, direction, todayEpochDay)
+                        .forEach { Reminders.sync(context, it) }
+                },
+                onStartFocus = { task ->
+                    if (activeFocus == null) {
+                        app.focus.start(task.title, task.id, FocusMode.STOPWATCH, 0L)
+                    }
+                    page = AppPage.FOCUS
+                    timerOpen = true
                 },
                 onCompose = { bucket ->
                     editorTaskId = null

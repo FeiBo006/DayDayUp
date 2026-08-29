@@ -430,7 +430,7 @@ private fun StepButton(forward: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Day / week / month, with one indicator that slides between them. */
+/** Day / week / month / year, with one indicator that slides between them. */
 @Composable
 private fun RangeSegments(selected: StatRange, onSelect: (StatRange) -> Unit) {
     val m = materials
@@ -439,6 +439,7 @@ private fun RangeSegments(selected: StatRange, onSelect: (StatRange) -> Unit) {
         StatRange.DAY to "日",
         StatRange.WEEK to "周",
         StatRange.MONTH to "月",
+        StatRange.YEAR to "年",
     )
     val position = animateFloatAsState(
         targetValue = options.indexOfFirst { it.first == selected }.coerceAtLeast(0).toFloat(),

@@ -6,7 +6,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /** The spans the statistics page can be read over. */
-enum class StatRange { DAY, WEEK, MONTH, CUSTOM }
+enum class StatRange { DAY, WEEK, MONTH, YEAR, CUSTOM }
 
 /** One wedge: a label, what it cost, and its share of the whole. */
 data class FocusSlice(
@@ -87,6 +87,7 @@ fun rangeBounds(
         start to start.plusDays(6)
     }
     StatRange.MONTH -> anchor.withDayOfMonth(1) to anchor.withDayOfMonth(anchor.lengthOfMonth())
+    StatRange.YEAR -> anchor.withDayOfYear(1) to anchor.withDayOfYear(anchor.lengthOfYear())
     StatRange.CUSTOM ->
         if (customStart.isAfter(customEnd)) customEnd to customStart else customStart to customEnd
 }
@@ -98,6 +99,7 @@ fun stepAnchor(range: StatRange, anchor: LocalDate, forward: Boolean): LocalDate
         StatRange.DAY -> anchor.plusDays(delta)
         StatRange.WEEK -> anchor.plusWeeks(delta)
         StatRange.MONTH -> anchor.plusMonths(delta)
+        StatRange.YEAR -> anchor.plusYears(delta)
         StatRange.CUSTOM -> anchor
     }
 }

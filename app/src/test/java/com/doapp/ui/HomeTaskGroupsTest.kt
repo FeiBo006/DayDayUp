@@ -27,6 +27,19 @@ class HomeTaskGroupsTest {
         assertEquals(emptyList<Task>(), grouped.planDone)
     }
 
+    @Test
+    fun todayTasksUseTheSavedManualOrder() {
+        val tasks = listOf(
+            task("last", Bucket.TODAY, todayOrder = 3_000L),
+            task("first", Bucket.TODAY, todayOrder = 1_000L),
+            task("middle", Bucket.TODAY, todayOrder = 2_000L),
+        )
+
+        val grouped = groupHomeTasks(tasks, todayEpochDay = 100L)
+
+        assertEquals(listOf("first", "middle", "last"), grouped.todayOpen.map { it.id })
+    }
+
     private fun task(
         id: String,
         bucket: Bucket,
@@ -34,6 +47,7 @@ class HomeTaskGroupsTest {
         planDay: Long? = null,
         completedAt: Long? = null,
         deletedAt: Long? = null,
+        todayOrder: Long = 0L,
     ) = Task(
         id = id,
         title = id,
@@ -42,5 +56,6 @@ class HomeTaskGroupsTest {
         planDay = planDay,
         completedAt = completedAt,
         deletedAt = deletedAt,
+        todayOrder = todayOrder,
     )
 }

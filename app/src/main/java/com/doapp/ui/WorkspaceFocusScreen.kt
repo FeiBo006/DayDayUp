@@ -32,6 +32,9 @@ import com.doapp.data.formatDurationLong
 import com.doapp.data.formatDurationShort
 import com.doapp.data.summarize
 import kotlinx.coroutines.delay
+import java.time.DayOfWeek
+import java.time.LocalDate
+import kotlin.math.roundToInt
 
 @Composable
 fun WorkspaceFocusScreen(
@@ -45,6 +48,13 @@ fun WorkspaceFocusScreen(
     val summary = remember(sessions, today) { summarize(sessions, today, today) }
     val recent = remember(sessions, today) {
         summarize(sessions, today.minusDays(29), today).slices.take(4)
+    }
+    val periodSummaries = remember(sessions, today) {
+        listOf(
+            PeriodSummary("本周", summarize(sessions, today.with(DayOfWeek.MONDAY), today)),
+            PeriodSummary("本月", summarize(sessions, today.withDayOfMonth(1), today)),
+            PeriodSummary("今年", summarize(sessions, today.withDayOfYear(1), today)),
+        )
     }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(active) {
@@ -104,6 +114,103 @@ fun WorkspaceFocusScreen(
             WorkspaceHeatmapPanel(sessions = sessions, today = today)
             WorkspaceDailyTrendPanel(sessions = sessions, today = today)
         }
+
+        PeriodStatsPanel(periodSummaries, today)
+    }
+}
+
+private data class PeriodSummary(
+    val label: String,
+    val summary: FocusSummary,
+)
+
+@Composable
+private fun PeriodStatsPanel(periods: List<PeriodSummary>, today: LocalDate) {
+    val yearly = periods.lastOrNull()?.summary ?: FocusSummary.Empty
+    WorkspacePanel {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${today.year} 年度统计",
+                    color = WorkspaceColors.Ink,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "阶段汇总与具体去向",
+                    color = WorkspaceColors.Secondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                "全年 ${yearly.sessions} 次",
+                color = WorkspaceColors.Secondary,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            periods.forEach { period ->
+                PeriodStatCell(period, Modifier.weight(1f))
+            }
+        }
+        WorkspaceDivider()
+        Text(
+            "年度专注明细",
+            color = WorkspaceColors.Secondary,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+        )
+        if (yearly.slices.isEmpty()) {
+            Text(
+                "今年还没有完成的专注记录。",
+                color = WorkspaceColors.Tertiary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+            )
+        } else {
+            yearly.slices.forEachIndexed { index, slice ->
+                if (index > 0) WorkspaceDivider()
+                WorkspaceRow(
+                    title = slice.label,
+                    subtitle = "占全年 ${(slice.fraction * 100).roundToInt()}% · 同名记录已合并",
+                    trailing = {
+                        Text(
+                            formatDurationLong(slice.millis),
+                            color = WorkspaceColors.Ink,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeriodStatCell(period: PeriodSummary, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            period.label,
+            color = WorkspaceColors.Secondary,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            formatDurationShort(period.summary.totalMillis),
+            color = WorkspaceColors.Ink,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 3.dp),
+        )
+        Text(
+            "${period.summary.sessions} 次",
+            color = WorkspaceColors.Tertiary,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 1.dp),
+        )
     }
 }
 

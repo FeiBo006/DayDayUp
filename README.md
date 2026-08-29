@@ -1,168 +1,112 @@
 # DayDayUp
 
-一款为 Android 手机与平板设计的极简待办与专注应用。
+<p align="center">
+  <strong>极简的 Android 任务与专注应用</strong><br />
+  把今天要做的事、未来计划和真正投入的时间放在同一个地方。
+</p>
 
-把今天要做的事、以后要做的事和真正投入的时间放在同一个地方。没有复杂层级，没有多余入口，打开就能开始。
-
-> 当前版本 `1.1` · 支持 Android 8.0 及以上系统
+<p align="center">
+  Android 8.0+　·　手机 / 平板　·　Kotlin + Jetpack Compose
+</p>
 
 ## 界面预览
 
 <p align="center">
-  <img src="docs/screenshots/home.png" width="30%" alt="DayDayUp 启动页" />
-  <img src="docs/screenshots/do.png" width="30%" alt="DayDayUp 任务主页" />
-  <img src="docs/screenshots/focus.png" width="30%" alt="DayDayUp 专注主页" />
+  <img src="docs/screenshots/do.png" width="30%" alt="DayDayUp 任务首页" />
+  <img src="docs/screenshots/focus.png" width="30%" alt="DayDayUp 专注首页" />
+  <img src="docs/screenshots/settings.png" width="30%" alt="DayDayUp 设置页面" />
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/task-editor.png" width="30%" alt="DayDayUp 新建任务" />
-  <img src="docs/screenshots/focus-timer.png" width="30%" alt="DayDayUp 专注计时" />
-  <img src="docs/screenshots/settings.png" width="30%" alt="DayDayUp 设置页" />
+  <sub>Today / Plan 任务管理　·　专注与统计　·　设置和数据备份</sub>
+</p>
+
+### 创建任务与开始专注
+
+<p align="center">
+  <img src="docs/screenshots/task-editor.png" width="45%" alt="创建重复任务" />
+  <img src="docs/screenshots/focus-timer.png" width="45%" alt="开始专注计时" />
 </p>
 
 ### 专注统计
 
 <p align="center">
-  <img src="docs/screenshots/focus-insights-phone.png" width="30%" alt="DayDayUp 手机端专注热力图与同名内容合并" />
-  <img src="docs/screenshots/focus-insights-tablet.png" width="62%" alt="DayDayUp 安卓平板专注统计双栏布局" />
+  <img src="docs/screenshots/focus-insights-phone.png" width="31%" alt="手机端年度专注统计" />
+  <img src="docs/screenshots/focus-insights-tablet.png" width="62%" alt="平板横屏专注统计" />
 </p>
 
-## 功能
+同名专注会自动合并并累加时长。统计页提供近 12 周活跃热力图、近 14 天趋势，以及本周、本月和年度汇总；年度明细会逐项显示名称、时长和占比。
 
-### Today：只看今天
+## 核心功能
 
-- 集中展示今天仍需完成的任务
-- 任务完成后即时更新今日进度与百分比
-- 已完成任务保留在当天列表中，状态一目了然
-- 过期的 Plan 任务自动进入 Today，不会被遗忘
-- 空状态保持干净，不使用多余提示打扰
+| 模块 | 功能 |
+| --- | --- |
+| 任务管理 | Today 与 Plan、计划日期、备注、完成状态、回收站 |
+| 重复任务 | 支持每天、每周、每月；完成后自动生成下一次任务 |
+| 今日安排 | 任务拖拽排序，过期 Plan 自动进入 Today |
+| 专注计时 | 从任务一键开始，支持正计时、倒计时、暂停与继续 |
+| 数据统计 | 同名内容合并、每日趋势、活跃热力图、周/月/年度统计 |
+| 提醒 | 任务定时通知、设备重启后恢复未完成提醒 |
+| 数据管理 | JSON 导入与导出，导入时按记录 ID 合并 |
 
-### Plan：把以后留给以后
+## 使用方式
 
-- 将暂时不需要处理的事项放入 Plan
-- 可为计划任务选择具体日期
-- 到达计划日期后自动归入 Today
-- Today 与 Plan 可以在编辑任务时随时切换
-- 计划日期、提醒时间和备注直接显示在任务摘要中
+1. 在 **Do** 中创建 Today 或 Plan 任务。
+2. 为任务选择重复规则、计划日期或提醒时间。
+3. 拖动 Today 任务右侧手柄调整当天顺序。
+4. 点击任务右侧播放按钮，直接进入专注计时。
+5. 在 **专注** 页面查看热力图、趋势和年度明细。
 
-### 完整的任务操作
+再次点击当前 Dock 入口可以返回白色启动界面。
 
-- 快速创建任务
-- 添加可选备注
-- 编辑任务内容与所属列表
-- 一键标记完成或恢复未完成
-- 设置通知提醒
-- 删除的任务先进入回收站，避免误操作
-- 回收站内容支持恢复、永久删除和自动清理
+## Android 平板适配
 
-### 专注计时
+DayDayUp 会根据可用空间自动选择布局：
 
-- 支持正计时，适合开放式学习或工作
-- 支持倒计时，适合番茄钟和固定时长任务
-- 专注时可填写学习内容，也可以直接开始
-- 可以把一次专注关联到已有任务
-- 计时过程中支持暂停、继续、完成和取消
-- 倒计时结束后通过系统提醒通知
-- 不足一分钟的短暂误触不会写入正式记录
-
-### 专注记录
-
-- 汇总当天累计专注时长
-- 显示当天完成的专注次数
-- 按学习内容统计时间分布与累计时长
-- 使用近 12 周活跃热力图展示学习频率
-- 使用近 14 天堆叠柱状图展示每日专注趋势
-- 不同学习内容使用固定颜色区分，图例同步显示各自总时长
-- 名称相同的专注自动合并，只保留一项并累加时长
-- 名称前后的多余空格会被忽略，例如两次“代码”各 1 分钟最终显示为“代码 2 分钟”
-- 最近 30 天汇总按总时长排序
-- 可进入全部记录查看历史内容
-- 汇总数据合并显示，原始专注记录仍逐条保留
-- 支持删除不需要的专注记录
-
-### 提醒与后台恢复
-
-- 使用 Android 系统通知发送任务提醒
-- 支持精确闹钟，尽量在设定时刻触发
-- 设备重启后重新同步未完成提醒
-- 应用更新后自动恢复提醒计划
-- 提供通知、闹钟和电池策略状态检查
-- 针对不同 Android 厂商提供自启动与后台设置入口
-
-### 备份与恢复
-
-- 将任务和专注记录导出为 JSON 文件
-- 从已有 DayDayUp 备份中导入数据
-- 导入时按记录 ID 合并，避免重复覆盖
-- 适合换机、重装或在多台设备之间手动迁移
-
-### 外观
-
-- 纯色、无渐变的极简视觉语言
-- 内置多种背景，也可从相册选择图片
-- 支持调整背景模糊程度和压暗强度
-- 状态栏、导航栏和页面背景保持统一
-
-### 动画与交互
-
-- 保留 DayDayUp 字标开机动画
-- 启动页使用简洁的几何循环动画
-- Dock 应用采用类似手机打开 App 的空间过渡
-- 再次点击当前 Dock 图标即可返回白色启动页
-- 页面切换、按钮按压和任务状态变化均带有轻量反馈
-- 自动尊重系统“减少动态效果”设置
-
-### Android 平板适配
-
-- 根据可用宽度自动切换手机与宽屏布局
-- 宽屏设备采用双栏内容，减少无意义的纵向滚动
-- 页面内容设置合理的最大宽度，避免在大屏上过度拉伸
-- Dock 在手机和平板上始终保持居中和舒适触控尺寸
-- 自动处理状态栏、导航栏与横竖屏安全区域
-
-## 设计原则
-
-DayDayUp 只保留三处主要入口：
-
-- **Do**：管理今天和未来的任务
-- **专注**：开始计时并查看投入记录
-- **设置**：处理提醒、壁纸、备份与回收站
-
-界面以白色、黑色和少量功能色为主。页面之间保持一致的空间关系，常用操作靠近拇指可触区域，次要信息降低视觉权重，让任务本身始终成为重点。
+- 手机使用单列纵向布局。
+- 平板竖屏增加内容宽度，但限制最大阅读宽度。
+- 平板横屏切换为双栏统计与任务布局。
+- Dock、状态栏、导航栏和底部安全区域会随方向自动调整。
 
 ## 技术栈
 
 - Kotlin
-- Jetpack Compose
-- Material 3
-- AndroidX Lifecycle
+- Jetpack Compose / Material 3
+- Kotlin Coroutines / StateFlow
 - Kotlinx Serialization
 - Gradle Kotlin DSL
 
-## 本地运行
+项目数据保存在本地 JSON 文件中，不依赖账号系统或远程服务。
 
-使用 Android Studio 打开项目，等待 Gradle 同步完成后运行 `app` 配置即可。
+## 本地构建
 
-Windows 命令行构建：
+使用 Android Studio 打开仓库，等待 Gradle 同步完成后运行 `app` 配置。
+
+Windows：
 
 ```powershell
-.\gradlew.bat assembleDebug
+.\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-macOS 或 Linux：
+macOS / Linux：
 
 ```bash
-./gradlew assembleDebug
+./gradlew testDebugUnitTest assembleDebug
 ```
 
-Debug APK 输出位置：
+构建完成后的 Debug APK：
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-运行单元测试：
+## 项目结构
 
-```powershell
-.\gradlew.bat testDebugUnitTest
+```text
+app/src/main/java/com/doapp/
+├─ data/       任务、专注记录与本地存储
+├─ notify/     提醒、重启恢复与后台处理
+└─ ui/         Compose 页面、组件与自适应布局
+
+docs/screenshots/  README 使用的界面截图
 ```

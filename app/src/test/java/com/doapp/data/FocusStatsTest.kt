@@ -20,6 +20,17 @@ class FocusStatsTest {
     }
 
     @Test
+    fun yearBoundsCoverTheWholeCalendarYear() {
+        val anchor = LocalDate.of(2026, 8, 29)
+
+        assertEquals(
+            LocalDate.of(2026, 1, 1) to LocalDate.of(2026, 12, 31),
+            rangeBounds(StatRange.YEAR, anchor),
+        )
+        assertEquals(LocalDate.of(2027, 8, 29), stepAnchor(StatRange.YEAR, anchor, true))
+    }
+
+    @Test
     fun summaryFiltersByStartDayAndGroupsLabels() {
         val sessions = listOf(
             session("a", "写作", "2026-08-23T01:00:00Z", 20),

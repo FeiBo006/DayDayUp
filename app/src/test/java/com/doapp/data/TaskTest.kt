@@ -6,8 +6,19 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 class TaskTest {
+
+    @Test
+    fun repeatRulesAdvanceFromTheCompletedOccurrence() {
+        val day = LocalDate.of(2026, 8, 29)
+
+        assertEquals(null, RepeatRule.NONE.nextDate(day))
+        assertEquals(day.plusDays(1), RepeatRule.DAILY.nextDate(day))
+        assertEquals(day.plusWeeks(1), RepeatRule.WEEKLY.nextDate(day))
+        assertEquals(day.plusMonths(1), RepeatRule.MONTHLY.nextDate(day))
+    }
 
     @Test
     fun reminderMustStillBeCurrentAndDue() {

@@ -1,6 +1,7 @@
 package com.doapp.data
 
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -9,6 +10,9 @@ import java.util.UUID
  */
 @Serializable
 enum class Bucket { TODAY, LATER }
+
+@Serializable
+enum class RepeatRule { NONE, DAILY, WEEKLY, MONTHLY }
 
 @Serializable
 data class Task(
@@ -29,13 +33,31 @@ data class Task(
     val notifiedAt: Long? = null,
     /** Epoch day (LocalDate.toEpochDay) this task is planned for, when it lives in Plan. */
     val planDay: Long? = null,
+    /** Lower values appear earlier in Today. Zero means the task has not been manually ordered. */
+    val todayOrder: Long = 0L,
+    /** How the task creates its next occurrence after completion. */
+    val repeatRule: RepeatRule = RepeatRule.NONE,
     /** Set when the task sits in the trash; null while it's active. */
     val deletedAt: Long? = null,
 ) {
     val hasReminder: Boolean get() = reminderAt != null
     val isTrashed: Boolean get() = deletedAt != null
+    val repeats: Boolean get() = repeatRule != RepeatRule.NONE
 }
 
 /** Current store state is authoritative when an alarm arrives; stale intents are not. */
 fun Task.isReminderDue(now: Long): Boolean =
     !done && !isTrashed && notifiedAt == null && reminderAt?.let { it <= now } == true
+
+fun Task.todaySortKey(): Long = when {
+    todayOrder > 0L -> todayOrder
+    createdAt > 0L -> createdAt
+    else -> Long.MAX_VALUE
+}
+
+fun RepeatRule.nextDate(after: LocalDate): LocalDate? = when (this) {
+    RepeatRule.NONE -> null
+    RepeatRule.DAILY -> after.plusDays(1)
+    RepeatRule.WEEKLY -> after.plusWeeks(1)
+    RepeatRule.MONTHLY -> after.plusMonths(1)
+}

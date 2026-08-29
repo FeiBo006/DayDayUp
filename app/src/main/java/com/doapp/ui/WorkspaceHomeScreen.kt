@@ -3,6 +3,7 @@ package com.doapp.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -19,23 +20,32 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.doapp.data.Bucket
+import com.doapp.data.RepeatRule
 import com.doapp.data.Task
 import java.time.LocalDate
 
@@ -45,6 +55,8 @@ fun WorkspaceHomeScreen(
     onToggle: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
     onCompose: (Bucket) -> Unit,
+    onMoveToday: (Task, Int) -> Unit,
+    onStartFocus: (Task) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = rememberWorkspaceToday()
@@ -116,15 +128,15 @@ fun WorkspaceHomeScreen(
         if (layout.usesWideColumns) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(Modifier.weight(1f)) {
-                    TodaySection(groups, today, openCount, onCompose, onToggle, onOpenTask)
+                    TodaySection(groups, today, openCount, onCompose, onToggle, onOpenTask, onMoveToday, onStartFocus)
                 }
                 Box(Modifier.weight(1f)) {
-                    PlanSection(groups, today, onCompose, onToggle, onOpenTask)
+                    PlanSection(groups, today, onCompose, onToggle, onOpenTask, onStartFocus)
                 }
             }
         } else {
-            TodaySection(groups, today, openCount, onCompose, onToggle, onOpenTask)
-            PlanSection(groups, today, onCompose, onToggle, onOpenTask)
+            TodaySection(groups, today, openCount, onCompose, onToggle, onOpenTask, onMoveToday, onStartFocus)
+            PlanSection(groups, today, onCompose, onToggle, onOpenTask, onStartFocus)
         }
     }
 }
@@ -137,6 +149,8 @@ private fun TodaySection(
     onCompose: (Bucket) -> Unit,
     onToggle: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
+    onMoveToday: (Task, Int) -> Unit,
+    onStartFocus: (Task) -> Unit,
 ) = TaskSection(
     title = "Today",
     caption = if (openCount == 0) "现在没有待完成任务" else "$openCount 条待完成",
@@ -145,6 +159,8 @@ private fun TodaySection(
     onAdd = { onCompose(Bucket.TODAY) },
     onToggle = onToggle,
     onOpenTask = onOpenTask,
+    onMove = onMoveToday,
+    onStartFocus = onStartFocus,
 )
 
 @Composable
@@ -154,6 +170,7 @@ private fun PlanSection(
     onCompose: (Bucket) -> Unit,
     onToggle: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
+    onStartFocus: (Task) -> Unit,
 ) = TaskSection(
     title = "Plan",
     caption = if (groups.planOpen.isEmpty()) "以后要做的事放在这里" else "${groups.planOpen.size} 条计划",
@@ -162,6 +179,8 @@ private fun PlanSection(
     onAdd = { onCompose(Bucket.LATER) },
     onToggle = onToggle,
     onOpenTask = onOpenTask,
+    onMove = null,
+    onStartFocus = onStartFocus,
 )
 
 @Composable
@@ -173,6 +192,8 @@ private fun TaskSection(
     onAdd: () -> Unit,
     onToggle: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
+    onMove: ((Task, Int) -> Unit)?,
+    onStartFocus: (Task) -> Unit,
 ) {
     WorkspacePanel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -191,20 +212,36 @@ private fun TaskSection(
             )
         } else {
             Spacer(Modifier.height(10.dp))
+            val movableLastIndex = tasks.indexOfLast { !it.done }
             tasks.forEachIndexed { index, task ->
                 if (index > 0) WorkspaceDivider()
-                WorkspaceTaskRow(
-                    task = task,
-                    onToggle = { onToggle(promotedWorkspaceTask(task, todayEpochDay)) },
-                    onClick = { onOpenTask(promotedWorkspaceTask(task, todayEpochDay)) },
-                )
+                val shownTask = promotedWorkspaceTask(task, todayEpochDay)
+                key(task.id) {
+                    WorkspaceTaskRow(
+                        task = task,
+                        canMoveUp = onMove != null && !task.done && index > 0,
+                        canMoveDown = onMove != null && !task.done && index < movableLastIndex,
+                        onToggle = { onToggle(shownTask) },
+                        onClick = { onOpenTask(shownTask) },
+                        onMove = { direction -> onMove?.invoke(task, direction) },
+                        onStartFocus = { onStartFocus(shownTask) },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun WorkspaceTaskRow(task: Task, onToggle: () -> Unit, onClick: () -> Unit) {
+private fun WorkspaceTaskRow(
+    task: Task,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onToggle: () -> Unit,
+    onClick: () -> Unit,
+    onMove: (Int) -> Unit,
+    onStartFocus: () -> Unit,
+) {
     val rowInteraction = remember { MutableInteractionSource() }
     val rowPressed by rowInteraction.collectIsPressedAsState()
     val rowScale by animateFloatAsState(
@@ -258,6 +295,7 @@ private fun WorkspaceTaskRow(task: Task, onToggle: () -> Unit, onClick: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
             val meta = buildList {
+                if (task.repeatRule != RepeatRule.NONE) add(task.repeatRule.workspaceLabel)
                 task.planDay?.let { add(formatPlanDay(it)) }
                 task.reminderAt?.let { add(formatReminder(it)) }
                 if (task.note.isNotBlank()) add(task.note)
@@ -273,6 +311,113 @@ private fun WorkspaceTaskRow(task: Task, onToggle: () -> Unit, onClick: () -> Un
                 )
             }
         }
+        if (!task.done) {
+            Row(
+                modifier = Modifier.padding(start = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (canMoveUp || canMoveDown) {
+                    DragReorderHandle(
+                        canMoveUp = canMoveUp,
+                        canMoveDown = canMoveDown,
+                        onMove = onMove,
+                    )
+                }
+                IconTileButton(
+                    icon = Icons.Rounded.PlayArrow,
+                    contentDescription = "开始专注",
+                    enabled = true,
+                    emphasized = true,
+                    onClick = onStartFocus,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DragReorderHandle(
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMove: (Int) -> Unit,
+) {
+    var dragDistance by remember { mutableFloatStateOf(0f) }
+    val threshold = with(LocalDensity.current) { 28.dp.toPx() }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .pointerInput(canMoveUp, canMoveDown) {
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onDragEnd = { dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                ) { change, amount ->
+                    change.consume()
+                    dragDistance += amount
+                    when {
+                        dragDistance <= -threshold && canMoveUp -> {
+                            onMove(-1)
+                            dragDistance = 0f
+                        }
+                        dragDistance >= threshold && canMoveDown -> {
+                            onMove(1)
+                            dragDistance = 0f
+                        }
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.DragHandle,
+            contentDescription = "拖动排序",
+            tint = WorkspaceColors.Tertiary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun IconTileButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    emphasized: Boolean = false,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.94f else 1f,
+        animationSpec = Motion.Press,
+        label = "workspaceTaskActionPress",
+    )
+    val background = when {
+        !enabled -> Color.Transparent
+        emphasized -> WorkspaceColors.Do.copy(alpha = 0.10f)
+        else -> Color.Transparent
+    }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(10.dp))
+            .background(background)
+            .then(if (enabled) Modifier.pressableNoRipple(interaction, onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = when {
+                !enabled -> WorkspaceColors.Tertiary.copy(alpha = 0.40f)
+                emphasized -> WorkspaceColors.Do
+                else -> WorkspaceColors.Secondary
+            },
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -304,4 +449,12 @@ private fun promotedWorkspaceTask(task: Task, todayEpochDay: Long): Task =
         task.copy(bucket = Bucket.TODAY, planDay = null)
     } else {
         task
+    }
+
+private val RepeatRule.workspaceLabel: String
+    get() = when (this) {
+        RepeatRule.NONE -> ""
+        RepeatRule.DAILY -> "每天"
+        RepeatRule.WEEKLY -> "每周"
+        RepeatRule.MONTHLY -> "每月"
     }

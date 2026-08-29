@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.doapp.data.Bucket
 import com.doapp.data.Task
+import com.doapp.data.todaySortKey
 import com.doapp.ui.theme.appShape
 import com.doapp.ui.theme.materials
 import kotlinx.coroutines.delay
@@ -92,9 +93,13 @@ internal fun groupHomeTasks(tasks: List<Task>, todayEpochDay: Long): HomeTaskGro
     }
 
     return HomeTaskGroups(
-        todayOpen = todayOpen,
+        todayOpen = todayOpen.sortedWith(
+            compareBy<Task> { it.todaySortKey() }.thenBy { it.createdAt }
+        ),
         todayDone = todayDone.sortedByDescending { it.completedAt ?: 0L },
-        planOpen = planOpen.sortedBy { it.planDay ?: Long.MAX_VALUE },
+        planOpen = planOpen.sortedWith(
+            compareBy<Task> { it.planDay ?: Long.MAX_VALUE }.thenBy { it.createdAt }
+        ),
         planDone = planDone.sortedByDescending { it.completedAt ?: 0L },
     )
 }

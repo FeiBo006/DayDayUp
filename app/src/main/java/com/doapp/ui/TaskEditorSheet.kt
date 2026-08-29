@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,6 +73,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.doapp.data.Bucket
+import com.doapp.data.RepeatRule
 import com.doapp.data.Task
 import com.doapp.notify.BackgroundAccess
 import com.doapp.ui.theme.appShape
@@ -104,6 +107,9 @@ fun TaskEditorSheet(
     var note by rememberSaveable(draftKey) { mutableStateOf(initial?.note.orEmpty()) }
     var bucket by rememberSaveable(draftKey) {
         mutableStateOf(initial?.bucket ?: defaultBucket)
+    }
+    var repeatRule by rememberSaveable(draftKey) {
+        mutableStateOf(initial?.repeatRule ?: RepeatRule.NONE)
     }
 
     val initialReminder = initial?.reminderAt?.toLocalDateTime()
@@ -250,6 +256,30 @@ fun TaskEditorSheet(
             }
 
             FieldSurface(padded = false) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Repeat,
+                            contentDescription = null,
+                            tint = m.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "重复任务",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = m.label,
+                        )
+                    }
+                    RepeatRulePicker(
+                        selected = repeatRule,
+                        onSelect = { repeatRule = it },
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+
+            FieldSurface(padded = false) {
                 Column {
                     Row(
                         Modifier
@@ -367,6 +397,7 @@ fun TaskEditorSheet(
                                 // rather than staying retired by the last delivery.
                                 notifiedAt = if (at == base.reminderAt) base.notifiedAt else null,
                                 planDay = if (bucket == Bucket.LATER) planDay else null,
+                                repeatRule = repeatRule,
                             )
                         )
                     },
@@ -603,6 +634,58 @@ private fun SegmentedBuckets(selected: Bucket, onSelect: (Bucket) -> Unit) {
                         color = if (i == index) m.label else m.secondaryLabel,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepeatRulePicker(
+    selected: RepeatRule,
+    onSelect: (RepeatRule) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val m = materials
+    val options = listOf(
+        RepeatRule.NONE to "不重复",
+        RepeatRule.DAILY to "每天",
+        RepeatRule.WEEKLY to "每周",
+        RepeatRule.MONTHLY to "每月",
+    )
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        options.forEach { (rule, label) ->
+            val selectedNow = rule == selected
+            val interaction = remember(rule) { MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val scale by animateFloatAsState(
+                targetValue = if (pressed) 0.96f else 1f,
+                animationSpec = Motion.Press,
+                label = "repeatRulePress",
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .clip(appShape(10.dp))
+                    .background(
+                        if (selectedNow) m.accent.copy(alpha = 0.12f)
+                        else if (m.isDark) Color.White.copy(alpha = 0.07f)
+                        else Color.Black.copy(alpha = 0.04f)
+                    )
+                    .styleBorder(appShape(10.dp), if (selectedNow) m.accent.copy(alpha = 0.35f) else m.hairline)
+                    .pressableNoRipple(interaction) { onSelect(rule) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selectedNow) m.accent else m.secondaryLabel,
+                    maxLines = 1,
+                )
             }
         }
     }
